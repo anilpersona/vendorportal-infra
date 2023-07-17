@@ -1,0 +1,1444 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: S3 Buckets For Vendor Portal
+Parameters:
+  IamStack:
+    Type: String
+    Default: ""
+  LambdaRoleStockOnHandIngestion: 
+    Type: String
+    Default: ""
+  LambdaRoleDssSfrsEventPublish: 
+    Type: String
+    Default: ""
+  LambdaRoleDssFactorySfrsEventPublish: 
+    Type: String
+    Default: ""
+  EcsRoleCommitmentDataApi:
+    Type: String
+    Default: ""
+  EcsRoleProductApi:    
+    Type: String
+    Default: ""   
+  EcsRoleStockInHandApi:    
+    Type: String
+    Default: ""
+  EcsRoleSupplierApi:    
+    Type: String
+    Default: ""
+  EcsRoleSupplierDssAdapterApi:    
+    Type: String
+    Default: ""
+  EcsRoleFactoryApi:
+    Type: String
+    Default: ""
+  EcsRoleFactoryDssAdapterApi:
+    Type: String
+    Default: ""
+  BillingTag:
+    Default: "vendorportal"
+    Type: "String"
+  OwnerTag:
+    Default: "vendorportal"
+    Type: "String"
+  ProjectTag:
+    Default: "vendorportal"
+    Type: "String"
+  Environment:
+    Default: "dev"
+    AllowedValues: [dev, prod, nonprod]
+    Type: "String"
+    ConstraintDescription: must specify prod, dev, or nonprod.
+  SSEAlgo:
+    Type: String
+    Default: "AES256"
+Conditions: 
+  IsProd: !Equals [ !Ref Environment, "prod" ]
+  IsNonProd: !Equals [ !Ref Environment, "nonprod" ]
+  IsDev: !Equals [ !Ref Environment, "dev" ]
+  IsLambdaRoleStockOnHandIngestion: !Not [!Equals [ !Ref LambdaRoleStockOnHandIngestion, "" ]]
+  IsLambdaRoleDssSfrsEventPublish: !Not [!Equals [ !Ref LambdaRoleDssSfrsEventPublish, "" ]]
+  IsLambdaRoleDssFactorySfrsEventPublish: !Not [!Equals [ !Ref LambdaRoleDssFactorySfrsEventPublish, "" ]]
+  IsEcsRoleStockInHandApi: !Not [!Equals [ !Ref EcsRoleStockInHandApi, "" ]]
+  IsEcsRoleSupplierApi: !Not [!Equals [ !Ref EcsRoleSupplierApi, "" ]]
+  IsEcsRoleSupplierDssAdapterApi: !Not [!Equals [ !Ref EcsRoleSupplierDssAdapterApi, "" ]]
+  IsEcsRoleFactoryApi: !Not [!Equals [ !Ref EcsRoleFactoryApi, "" ]]
+  IsEcsRoleFactoryDssAdapterApi: !Not [!Equals [ !Ref EcsRoleFactoryDssAdapterApi, "" ]]
+  IsEcsRoleProductApi: !Not [!Equals [ !Ref EcsRoleProductApi, "" ]]
+  IsEcsRoleCommitmentDataApi: !Not [!Equals [ !Ref EcsRoleCommitmentDataApi, "" ]]
+  
+Resources:
+  VendorPortalArtifactBucketNameSsm:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${ProjectTag}/bucketname/artifacts"
+      Type: String
+      Value: !Ref VendorPortalArtifactBucket
+      Description: SSM Parameter stores artifact bucket name   
+      Tags:
+        Name: !Sub "${AWS::StackName}-ssm-param-bucketname"
+        Billinge: !Sub "${BillingTag}"
+        Environment: !Sub "${Environment}"        
+        Owner: !Sub "${OwnerTag}"
+        Project: !Sub "${ProjectTag}"
+  VendorPortalLogBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-s3-logs"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag
+      BucketName: !Sub kmartau-vendorportal-logs-${Environment}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true      
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: !Ref SSEAlgo
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: 'vendorportal-log-archival-config'
+            Status: Enabled
+            Transitions:
+              - StorageClass: STANDARD_IA
+                #3 months or 1/4 year
+                TransitionInDays: 90
+              - StorageClass: INTELLIGENT_TIERING
+                #6 months or 1/2 year
+                TransitionInDays: 180
+              - StorageClass: GLACIER
+                #2 years
+                TransitionInDays: 730
+              - StorageClass: DEEP_ARCHIVE
+                #4 years
+                TransitionInDays: 1460
+            #5 years
+            ExpirationInDays: 1825
+  VendorPortalLogBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:    
+      Bucket: !Ref VendorPortalLogBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyDeleteBucketAccess
+            Effect: Deny
+            Action: 's3:DeleteBucket'
+            Resource:
+              - !GetAtt VendorPortalLogBucket.Arn
+            Principal:
+              AWS: '*'        
+          - Sid: Allow CloudFront Flow Logs to use the key
+            Effect: Allow
+            Principal:
+              Service: delivery.logs.amazonaws.com
+            Action:
+              - "s3:PutObject"
+              # - "s3:GetObject"
+              #- "s3:DeleteObject"
+              - "s3:ListBucket"
+              #- "s3:GetBucketAcl"
+              #- "s3:PutBucketAcl"
+            Resource: 
+              - !GetAtt VendorPortalLogBucket.Arn
+              - !Sub "${VendorPortalLogBucket.Arn}/*"
+          - Sid: Allow ELB account(783225319266) for Sydney to put logs
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::783225319266:root
+            Action: s3:PutObject
+            Resource: 
+             - !Sub "${VendorPortalLogBucket.Arn}/public_alb/AWSLogs/${AWS::AccountId}/*"
+             - !Sub "${VendorPortalLogBucket.Arn}/internal_alb/AWSLogs/${AWS::AccountId}/*"
+          - Sid: Allow sumo account(926226587429) to get logs
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:${AWS::Partition}:iam::926226587429:root"
+            Action: 
+              - s3:GetObject
+              - s3:GetObjectVersion
+              - s3:ListBucketVersions
+              - s3:ListBucket
+            Resource: 
+             - !Sub "${VendorPortalLogBucket.Arn}/*"
+             - !Sub "${VendorPortalLogBucket.Arn}"
+          - Sid: Allow logs services to put logs only if ownership is set to kmart
+            Effect: Allow
+            Principal:
+              Service: delivery.logs.amazonaws.com
+            Action: s3:PutObject
+            Resource: 
+             - !Sub "${VendorPortalLogBucket.Arn}/public_alb/AWSLogs/${AWS::AccountId}/*"
+             - !Sub "${VendorPortalLogBucket.Arn}/internal_alb/AWSLogs/${AWS::AccountId}/*"
+            Condition:
+              StringEquals:
+                s3:x-amz-acl: bucket-owner-full-control
+          - Sid: Allow Logs service to read bucket acl
+            Effect: Allow
+            Principal:
+              Service: delivery.logs.amazonaws.com
+            Action: s3:GetBucketAcl
+            Resource: 
+              - !GetAtt VendorPortalLogBucket.Arn
+              - !Sub "${VendorPortalLogBucket.Arn}/*"
+          - Sid: "Allow Actions From dev/nonprod/prod"
+            Action:
+              - "s3:*"
+            Effect: "Allow"
+            Resource: 
+              - !GetAtt VendorPortalLogBucket.Arn
+              - !Sub "${VendorPortalLogBucket.Arn}/*"
+            Principal: 
+               AWS:
+                  - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/infra-cfnrole-vendorportal-nonprivileged'
+                  - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ADFS-${Environment}-vendorportal-global-admin'
+          - Sid: Allow firehose to access bucket
+            Effect: Allow
+            Principal:
+              Service: firehose.amazonaws.com
+            Action:
+              - 's3:AbortMultipartUpload'
+              - 's3:GetBucketLocation'
+              - 's3:GetObject'
+              - 's3:ListBucket'
+              - 's3:ListBucketMultipartUploads'
+              - 's3:PutObject'
+            Resource: 
+              - !GetAtt VendorPortalLogBucket.Arn
+              - !Sub "${VendorPortalLogBucket.Arn}/*"
+          - Sid: Allow cloudwatch service access
+            Effect: Allow
+            Principal:
+              Service: 
+                - !Sub "logs.${AWS::Region}.amazonaws.com"
+                - "logs.us-east-1.amazonaws.com"                
+            Action:
+              - 's3:GetBucketAcl'
+            Resource: 
+              - !GetAtt VendorPortalLogBucket.Arn
+          - Sid: Allow cloudwatch put access
+            Effect: Allow
+            Principal:
+              Service: 
+                - !Sub "logs.${AWS::Region}.amazonaws.com"
+                - "logs.us-east-1.amazonaws.com"
+            Action:
+              - 's3:PutObject'
+            Resource: 
+              - !Sub "${VendorPortalLogBucket.Arn}/*" 
+            Condition:
+              StringEquals:
+                s3:x-amz-acl: bucket-owner-full-control                         
+  VendorPortalArtifactBucket:
+    Type: AWS::S3::Bucket    
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-s3-artifacts"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag      
+      BucketName: !Sub kmartau-vendorportal-artifact-${Environment}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: !Ref SSEAlgo
+  VendorPortalArtifactPolicy:
+    Type: AWS::S3::BucketPolicy    
+    Properties:
+      Bucket: !Ref VendorPortalArtifactBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyDeleteBucketAccess
+            Effect: Deny
+            Action: 's3:DeleteBucket'
+            Resource:
+              - !GetAtt VendorPortalArtifactBucket.Arn
+            Principal:
+              AWS: '*'           
+          - Sid: Allow list from jenkins user
+            Principal: 
+              AWS:
+                - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:user/infra-prjauth-jenkins'
+            Effect: Allow
+            Action: 
+              - s3:ListBucket
+              - s3:GetBucketLocation            
+            Resource: 
+              - !GetAtt VendorPortalArtifactBucket.Arn                         
+          - Sid: Allow sync from jenkins user for pdf files
+            Principal: 
+              AWS:
+                - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:user/infra-prjauth-jenkins"
+            Effect: Allow
+            Action:
+              - s3:GetObject              
+              - s3:DeleteObject
+              - s3:PutObject          
+            Resource:               
+              - !Sub "${VendorPortalArtifactBucket.Arn}/common-assets/*"
+          - Sid: "Allow Actions From dev/nonprod/prod"
+            Action:
+              - "s3:*"
+            Effect: "Allow"
+            Resource: 
+              - !GetAtt VendorPortalArtifactBucket.Arn
+              - !Sub "${VendorPortalArtifactBucket.Arn}/*"
+            Principal: 
+              AWS:
+                - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/infra-cfnrole-vendorportal-nonprivileged'
+                - !If 
+                  - IsDev    
+                  - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ADFS-${Environment}-vendorportal-global-admin'
+                  - !Ref "AWS::NoValue"
+  VendorPortalEventBucket:
+    Type: AWS::S3::Bucket    
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-s3-events"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag      
+      BucketName: !Sub kmartau-vendorportal-events-${Environment}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true      
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: !Ref SSEAlgo
+      LifecycleConfiguration:
+        Rules:
+          - Id: 7-days-expiry
+            Prefix: raw
+            Status: Enabled
+            ExpirationInDays: 7
+            NoncurrentVersionExpirationInDays: 7
+  VendorPortalEventPolicy:
+    Type: AWS::S3::BucketPolicy    
+    Properties:
+      Bucket: !Ref VendorPortalEventBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - !If #project-admin read access
+            - IsDev
+            - !Ref AWS::NoValue
+            - Sid: AllowRead
+              Effect: Deny
+              NotAction:
+                - 's3:List*'
+                - 's3:GetBucketPolicy'
+                - 's3:GetAccountPublicAccessBlock'
+                - 's3:GetBucketObjectOwnership'
+                - 's3:GetBucketAcl'
+                - 's3:GetBucketCORS'            
+              Resource:
+                - !GetAtt VendorPortalEventBucket.Arn
+                - !Sub "${VendorPortalEventBucket.Arn}/*"
+              Principal:
+                AWS: '*'
+              Condition:
+                ArnEquals:
+                  'aws:PrincipalArn':
+                    - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ADFS-${Environment}-vendorportal-global-admin'                     
+          - Sid: DenyDeleteBucketAccess
+            Effect: Deny
+            Action: 's3:DeleteBucket'
+            Resource:
+              - !GetAtt VendorPortalEventBucket.Arn
+            Principal:
+              AWS: '*'         
+          - Sid: SecureOnly
+            Effect: Deny
+            Action: 's3:*'
+            Resource:
+              - !GetAtt VendorPortalEventBucket.Arn
+              - !Sub "${VendorPortalEventBucket.Arn}/*"
+            Principal:
+              AWS: '*'
+            Condition:
+              Bool:
+                'aws:SecureTransport': 'false'
+          - Sid: DenyUnencryptedPuts
+            Effect: Deny
+            Action: 's3:PutObject'
+            Resource: !Sub "${VendorPortalEventBucket.Arn}/*"
+            Principal:
+              AWS: '*'
+            Condition:
+              'Null':
+                's3:x-amz-server-side-encryption': 'true'
+          - Sid: DenyAccessToAllExceptAllowedArns
+            Effect: Deny
+            Principal:
+              AWS: "*"
+            Action: 's3:*'
+            Resource:
+              - !GetAtt VendorPortalEventBucket.Arn
+              - !Sub "${VendorPortalEventBucket.Arn}/*"
+            Condition:
+              ArnNotEquals:
+                aws:PrincipalArn:
+                  - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/infra-cfnrole-vendorportal-nonprivileged'                
+                  - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ADFS-${Environment}-vendorportal-global-admin'
+                  - !If 
+                    - IsEcsRoleProductApi
+                    - !Ref EcsRoleProductApi
+                    - !Ref "AWS::NoValue"
+                  - !If 
+                    - IsEcsRoleCommitmentDataApi
+                    - !Ref EcsRoleCommitmentDataApi
+                    - !Ref "AWS::NoValue"                  
+
+          - !If # Restricted Admin access for nonprod and prod
+            - IsDev
+            - !Ref AWS::NoValue                     
+            - Sid: AllowRestrictedAdmin
+              Effect: Deny
+              NotAction:
+                - 's3:PutReplicationConfiguration'
+                - 's3:PutObjectVersionAcl'
+                - 's3:PutObjectRetention'
+                - 's3:PutObjectLegalHold'
+                - 's3:PutObjectAcl'
+                - 's3:PutMetricsConfiguration'
+                - 's3:PutLifecycleConfiguration'
+                - 's3:PutInventoryConfiguration'
+                - 's3:PutEncryptionConfiguration'
+                - 's3:PutBucketWebsite'
+                - 's3:PutBucketVersioning'
+                - 's3:PutBucketTagging'
+                - 's3:PutBucketRequestPayment'
+                - 's3:PutBucketPublicAccessBlock'
+                - 's3:PutBucketPolicy'
+                - 's3:PutBucketObjectLockConfiguration'
+                - 's3:PutBucketNotification'
+                - 's3:PutBucketLogging'
+                - 's3:PutBucketCORS'
+                - 's3:PutBucketAcl'
+                - 's3:PutAnalyticsConfiguration'
+                - 's3:PutAccelerateConfiguration'
+                - 's3:DeleteBucketWebsite'
+                - 's3:DeleteBucketPolicy'
+                - 's3:BypassGovernanceRetention'
+              Resource:
+                - !GetAtt VendorPortalEventBucket.Arn
+                - !Sub "${VendorPortalEventBucket.Arn}/*"
+              Principal:
+                AWS: '*'
+              Condition:
+                ArnEquals:
+                  'aws:PrincipalArn':
+                    - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/infra-cfnrole-vendorportal-nonprivileged'
+          - Sid: AllowProductServiceAccess
+            Effect: Deny
+            NotAction:
+              - 's3:PutObjectVersionTagging'
+              - 's3:PutObjectTagging'
+              - 's3:PutObject'
+              - 's3:AbortMultipartUpload'
+            Resource:
+              - !GetAtt VendorPortalEventBucket.Arn
+              - !Sub "${VendorPortalEventBucket.Arn}/*"                
+            Principal:
+              AWS: '*'
+            Condition:
+              ArnEquals:
+                'aws:PrincipalArn': 
+                  - Fn::ImportValue: !Sub "${IamStack}::VendorPortalEmptyRoleARN" 
+                  - !If 
+                    - IsEcsRoleProductApi
+                    - !Ref EcsRoleProductApi
+                    - !Ref "AWS::NoValue"
+                  - !If 
+                    - IsEcsRoleCommitmentDataApi
+                    - !Ref EcsRoleCommitmentDataApi
+                    - !Ref "AWS::NoValue"                                                        
+                   
+  VendorPortalUserUploadsBucket:
+    Type: AWS::S3::Bucket    
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-s3-useruploads"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag      
+      BucketName: !Sub kmartau-vendorportal-useruploads-${Environment}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true      
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: !Ref SSEAlgo
+      LifecycleConfiguration:
+        Rules:
+          - Id: 3-day-expiry
+            Prefix: raw
+            Status: Enabled
+            ExpirationInDays: 3
+            NoncurrentVersionExpirationInDays: 3          
+  VendorPortalUserUploadsBucketPolicy:
+    Type: AWS::S3::BucketPolicy    
+    Properties:
+      Bucket: !Ref VendorPortalUserUploadsBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - !If #project-admin read access
+            - IsDev
+            - !Ref AWS::NoValue
+            - Sid: AllowRead
+              Effect: Deny
+              NotAction:
+                - 's3:List*'
+                - 's3:GetBucketPolicy'
+                - 's3:GetAccountPublicAccessBlock'
+                - 's3:GetBucketObjectOwnership'
+                - 's3:GetBucketAcl'
+                - 's3:GetBucketCORS'
+                - 's3:GetObject'
+                - 's3:GetObjectVersion'                
+              Resource:
+                - !GetAtt VendorPortalUserUploadsBucket.Arn
+                - !Sub "${VendorPortalUserUploadsBucket.Arn}/*"
+              Principal:
+                AWS: '*'
+              Condition:
+                ArnEquals:
+                  'aws:PrincipalArn':
+                    - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ADFS-${Environment}-vendorportal-global-admin'          
+          - Sid: DenyDeleteBucketAccess
+            Effect: Deny
+            Action: 's3:DeleteBucket'
+            Resource:
+              - !GetAtt VendorPortalUserUploadsBucket.Arn
+            Principal:
+              AWS: '*'
+                          
+          - Sid: SecureOnly
+            Effect: Deny
+            Action: 's3:*'
+            Resource:
+              - !GetAtt VendorPortalUserUploadsBucket.Arn
+              - !Sub "${VendorPortalUserUploadsBucket.Arn}/*"
+            Principal:
+              AWS: '*'
+            Condition:
+              Bool:
+                'aws:SecureTransport': 'false'
+          - Sid: DenyUnencryptedPuts
+            Effect: Deny
+            Action: 's3:PutObject'
+            Resource: !Sub "${VendorPortalUserUploadsBucket.Arn}/*"
+            Principal:
+              AWS: '*'
+            Condition:
+              'Null':
+                's3:x-amz-server-side-encryption': 'true'
+          - Sid: DenyAccessToAllExceptAllowedArns
+            Effect: Deny
+            Principal:
+              AWS: "*"
+            Action: 's3:*'
+            Resource:
+              - !GetAtt VendorPortalUserUploadsBucket.Arn
+              - !Sub "${VendorPortalUserUploadsBucket.Arn}/*"
+            Condition:
+              ArnNotEquals:
+                'aws:PrincipalArn':
+                  - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/infra-cfnrole-vendorportal-nonprivileged'                
+                  - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ADFS-${Environment}-vendorportal-global-admin'
+                  - !If 
+                    - IsLambdaRoleStockOnHandIngestion   
+                    - !Ref LambdaRoleStockOnHandIngestion
+                    - !Ref "AWS::NoValue"
+                  - !If 
+                    - IsLambdaRoleDssSfrsEventPublish   
+                    - !Ref LambdaRoleDssSfrsEventPublish
+                    - !Ref "AWS::NoValue"
+                  - !If 
+                    - IsLambdaRoleDssFactorySfrsEventPublish   
+                    - !Ref LambdaRoleDssFactorySfrsEventPublish
+                    - !Ref "AWS::NoValue"   
+                  - !If 
+                    - IsEcsRoleStockInHandApi
+                    - !Ref EcsRoleStockInHandApi
+                    - !Ref "AWS::NoValue"
+                  - !If 
+                    - IsEcsRoleSupplierApi
+                    - !Ref EcsRoleSupplierApi                  
+                    - !Ref "AWS::NoValue"
+                  - !If 
+                    - IsEcsRoleFactoryApi
+                    - !Ref EcsRoleFactoryApi
+                    - !Ref "AWS::NoValue"
+                  - !If 
+                    - IsEcsRoleFactoryDssAdapterApi
+                    - !Ref EcsRoleFactoryDssAdapterApi
+                    - !Ref "AWS::NoValue"
+                  - !If 
+                    - IsEcsRoleSupplierDssAdapterApi
+                    - !Ref EcsRoleSupplierDssAdapterApi                  
+                    - !Ref "AWS::NoValue"                    
+          - !If # Restricted Admin access for nonprod and prod
+            - IsDev
+            - !Ref AWS::NoValue                     
+            - Sid: AllowRestrictedAdmin
+              Effect: Deny
+              NotAction:
+                - 's3:PutReplicationConfiguration'
+                - 's3:PutObjectVersionAcl'
+                - 's3:PutObjectRetention'
+                - 's3:PutObjectLegalHold'
+                - 's3:PutObjectAcl'
+                - 's3:PutMetricsConfiguration'
+                - 's3:PutLifecycleConfiguration'
+                - 's3:PutInventoryConfiguration'
+                - 's3:PutEncryptionConfiguration'
+                - 's3:PutBucketWebsite'
+                - 's3:PutBucketVersioning'
+                - 's3:PutBucketTagging'
+                - 's3:PutBucketRequestPayment'
+                - 's3:PutBucketPublicAccessBlock'
+                - 's3:PutBucketPolicy'
+                - 's3:PutBucketObjectLockConfiguration'
+                - 's3:PutBucketNotification'
+                - 's3:PutBucketLogging'
+                - 's3:PutBucketCORS'
+                - 's3:PutBucketAcl'
+                - 's3:PutAnalyticsConfiguration'
+                - 's3:PutAccelerateConfiguration'
+                - 's3:DeleteBucketWebsite'
+                - 's3:DeleteBucketPolicy'
+                - 's3:BypassGovernanceRetention'
+              Resource:
+                - !GetAtt VendorPortalUserUploadsBucket.Arn
+                - !Sub "${VendorPortalUserUploadsBucket.Arn}/*"
+              Principal:
+                AWS: '*'
+              Condition:
+                ArnEquals:
+                  'aws:PrincipalArn':
+                    - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/infra-cfnrole-vendorportal-nonprivileged'
+                    
+          - Sid: AllowSOHServiceAccess #put & get only in raw
+            Effect: Deny
+            NotAction:
+              - 's3:PutObjectVersionTagging'
+              - 's3:PutObjectTagging'
+              - 's3:PutObject'
+              - 's3:AbortMultipartUpload'
+              - 's3:GetObject'
+            Resource:
+              - !GetAtt VendorPortalUserUploadsBucket.Arn
+              - !Sub "${VendorPortalUserUploadsBucket.Arn}/raw"
+              - !Sub "${VendorPortalUserUploadsBucket.Arn}/raw/*"                
+            Principal:
+              AWS: '*'
+            Condition:
+              ArnEquals:
+                'aws:PrincipalArn': 
+                  - Fn::ImportValue: !Sub "${IamStack}::VendorPortalEmptyRoleARN" 
+                  - !If 
+                    - IsEcsRoleStockInHandApi
+                    - !Ref EcsRoleStockInHandApi
+                    - !Ref "AWS::NoValue"                                  
+          - Sid: DenySOHServiceAccess
+            Effect: Deny
+            Action:
+              - 's3:Put*'
+              - 's3:Get*'
+            NotResource:
+              - !Sub "${VendorPortalUserUploadsBucket.Arn}/raw/*"
+            Principal:
+              AWS: '*'
+            Condition:
+              ArnEquals:
+                'aws:PrincipalArn': 
+                  - Fn::ImportValue: !Sub "${IamStack}::VendorPortalEmptyRoleARN"
+                  - !If 
+                    - IsEcsRoleStockInHandApi
+                    - !Ref EcsRoleStockInHandApi
+                    - !Ref "AWS::NoValue"
+          - Sid: AllowSupplierServiceAccess #put & get only in raw
+            Effect: Deny
+            NotAction:
+              - s3:PutObjectVersionTagging
+              - s3:PutObjectTagging
+              - s3:PutObject
+              - s3:PutObjectAcl
+              - s3:AbortMultipartUpload
+              - s3:GetObjectAcl
+              - s3:GetObject
+              - s3:GetObjectVersion
+              - s3:ListBucket
+            Resource:
+              - !GetAtt VendorPortalUserUploadsBucket.Arn
+              - !Sub "${VendorPortalUserUploadsBucket.Arn}/raw"
+              - !Sub "${VendorPortalUserUploadsBucket.Arn}/raw/*"                
+            Principal:
+              AWS: '*'
+            Condition:
+              ArnEquals:
+                'aws:PrincipalArn': 
+                  - Fn::ImportValue: !Sub "${IamStack}::VendorPortalEmptyRoleARN" 
+                  - !If 
+                    - IsEcsRoleSupplierApi
+                    - !Ref EcsRoleSupplierApi                  
+                    - !Ref "AWS::NoValue"
+          - Sid: AllowSupplierServiceDssAdapterAccess #put & get only in raw
+            Effect: Deny
+            NotAction:
+              - s3:PutObjectVersionTagging
+              - s3:PutObjectTagging
+              - s3:PutObject
+              - s3:PutObjectAcl
+              - s3:AbortMultipartUpload
+              - s3:GetObjectAcl
+              - s3:GetObject
+              - s3:GetObjectVersion
+              - s3:ListBucket
+            Resource:
+              - !GetAtt VendorPortalUserUploadsBucket.Arn
+              - !Sub "${VendorPortalUserUploadsBucket.Arn}/raw"
+              - !Sub "${VendorPortalUserUploadsBucket.Arn}/raw/*"                
+            Principal:
+              AWS: '*'
+            Condition:
+              ArnEquals:
+                'aws:PrincipalArn': 
+                  - Fn::ImportValue: !Sub "${IamStack}::VendorPortalEmptyRoleARN" 
+                  - !If 
+                    - IsEcsRoleSupplierDssAdapterApi
+                    - !Ref EcsRoleSupplierDssAdapterApi                  
+                    - !Ref "AWS::NoValue"
+          - Sid: AllowSupplierServiceDssSfrsEventPublishAccess #put & get only in raw
+            Effect: Deny
+            NotAction:
+              - s3:PutObjectVersionTagging
+              - s3:PutObjectTagging
+              - s3:PutObject
+              - s3:PutObjectAcl
+              - s3:AbortMultipartUpload
+              - s3:GetObjectAcl
+              - s3:GetObject
+              - s3:GetObjectVersion
+              - s3:ListBucket
+            Resource:
+              - !GetAtt VendorPortalUserUploadsBucket.Arn
+              - !Sub "${VendorPortalUserUploadsBucket.Arn}/raw"
+              - !Sub "${VendorPortalUserUploadsBucket.Arn}/raw/*"                
+            Principal:
+              AWS: '*'
+            Condition:
+              ArnEquals:
+                'aws:PrincipalArn': 
+                  - Fn::ImportValue: !Sub "${IamStack}::VendorPortalEmptyRoleARN" 
+                  - !If 
+                    - IsLambdaRoleDssSfrsEventPublish   
+                    - !Ref LambdaRoleDssSfrsEventPublish
+                    - !Ref "AWS::NoValue"
+          - Sid: DenySupplierServiceDssSfrsEventPublishAccess
+            Effect: Deny
+            Action:
+              - 's3:Put*'
+              - 's3:Get*'
+            NotResource:
+                - !Sub "${VendorPortalUserUploadsBucket.Arn}/raw/*"
+            Principal:
+                AWS: '*'
+            Condition:
+                ArnEquals:
+                  'aws:PrincipalArn': 
+                    - Fn::ImportValue: !Sub "${IamStack}::VendorPortalEmptyRoleARN"
+                    - !If 
+                      - IsLambdaRoleDssSfrsEventPublish   
+                      - !Ref LambdaRoleDssSfrsEventPublish
+                      - !Ref "AWS::NoValue"
+          - Sid: AllowSupplierServiceDssFactorySfrsEventPublishAccess #put & get only in raw
+            Effect: Deny
+            NotAction:
+              - s3:PutObjectVersionTagging
+              - s3:PutObjectTagging
+              - s3:PutObject
+              - s3:PutObjectAcl
+              - s3:AbortMultipartUpload
+              - s3:GetObjectAcl
+              - s3:GetObject
+              - s3:GetObjectVersion
+              - s3:ListBucket
+            Resource:
+              - !GetAtt VendorPortalUserUploadsBucket.Arn
+              - !Sub "${VendorPortalUserUploadsBucket.Arn}/raw"
+              - !Sub "${VendorPortalUserUploadsBucket.Arn}/raw/*"                
+            Principal:
+              AWS: '*'
+            Condition:
+              ArnEquals:
+                'aws:PrincipalArn': 
+                  - Fn::ImportValue: !Sub "${IamStack}::VendorPortalEmptyRoleARN" 
+                  - !If 
+                    - IsLambdaRoleDssFactorySfrsEventPublish   
+                    - !Ref LambdaRoleDssFactorySfrsEventPublish
+                    - !Ref "AWS::NoValue"
+          - Sid: DenySupplierServiceDssFactorySfrsEventPublishAccess
+            Effect: Deny
+            Action:
+              - 's3:Put*'
+              - 's3:Get*'
+            NotResource:
+                - !Sub "${VendorPortalUserUploadsBucket.Arn}/raw/*"
+            Principal:
+                AWS: '*'
+            Condition:
+                ArnEquals:
+                  'aws:PrincipalArn': 
+                    - Fn::ImportValue: !Sub "${IamStack}::VendorPortalEmptyRoleARN"
+                    - !If 
+                      - IsLambdaRoleDssFactorySfrsEventPublish   
+                      - !Ref LambdaRoleDssFactorySfrsEventPublish
+                      - !Ref "AWS::NoValue"
+          - Sid: DenySupplierServiceAccess
+            Effect: Deny
+            Action:
+              - 's3:Put*'
+              - 's3:Get*'
+            NotResource:
+              - !Sub "${VendorPortalUserUploadsBucket.Arn}/raw/*"
+            Principal:
+              AWS: '*'
+            Condition:
+              ArnEquals:
+                'aws:PrincipalArn': 
+                  - Fn::ImportValue: !Sub "${IamStack}::VendorPortalEmptyRoleARN"
+                  - !If 
+                    - IsEcsRoleSupplierApi
+                    - !Ref EcsRoleSupplierApi   
+                    - !Ref "AWS::NoValue"
+          - Sid: DenySupplierServiceDssAdapterAccess
+            Effect: Deny
+            Action:
+              - 's3:Put*'
+              - 's3:Get*'
+            NotResource:
+                - !Sub "${VendorPortalUserUploadsBucket.Arn}/raw/*"
+            Principal:
+                AWS: '*'
+            Condition:
+                ArnEquals:
+                  'aws:PrincipalArn': 
+                    - Fn::ImportValue: !Sub "${IamStack}::VendorPortalEmptyRoleARN"
+                    - !If 
+                      - IsEcsRoleSupplierDssAdapterApi
+                      - !Ref EcsRoleSupplierDssAdapterApi   
+                      - !Ref "AWS::NoValue"
+          - Sid: AllowFactoryFactoryDssAdapterServiceAccess #put & get only in raw
+            Effect: Deny
+            NotAction:
+              - s3:PutObjectVersionTagging
+              - s3:PutObjectTagging
+              - s3:PutObject
+              - s3:PutObjectAcl
+              - s3:AbortMultipartUpload
+              - s3:GetObjectAcl
+              - s3:GetObject
+              - s3:GetObjectVersion
+              - s3:ListBucket
+            Resource:
+              - !GetAtt VendorPortalUserUploadsBucket.Arn
+              - !Sub "${VendorPortalUserUploadsBucket.Arn}/raw"
+              - !Sub "${VendorPortalUserUploadsBucket.Arn}/raw/*"                
+            Principal:
+              AWS: '*'
+            Condition:
+              ArnEquals:
+                'aws:PrincipalArn': 
+                  - Fn::ImportValue: !Sub "${IamStack}::VendorPortalEmptyRoleARN" 
+                  - !If 
+                    - IsEcsRoleFactoryDssAdapterApi
+                    - !Ref EcsRoleFactoryDssAdapterApi
+                    - !Ref "AWS::NoValue"                                  
+          - Sid: DenyFactoryDssAdapterServiceAccess
+            Effect: Deny
+            Action:
+              - 's3:Put*'
+              - 's3:Get*'
+            NotResource:
+              - !Sub "${VendorPortalUserUploadsBucket.Arn}/raw/*"
+            Principal:
+              AWS: '*'
+            Condition:
+              ArnEquals:
+                'aws:PrincipalArn': 
+                  - Fn::ImportValue: !Sub "${IamStack}::VendorPortalEmptyRoleARN"
+                  - !If 
+                    - IsEcsRoleFactoryDssAdapterApi
+                    - !Ref EcsRoleFactoryDssAdapterApi
+                    - !Ref "AWS::NoValue" 
+          - Sid: AllowFactoryServiceAccess #put & get only in raw
+            Effect: Deny
+            NotAction:
+              - s3:PutObjectVersionTagging
+              - s3:PutObjectTagging
+              - s3:PutObject
+              - s3:PutObjectAcl
+              - s3:AbortMultipartUpload
+              - s3:GetObjectAcl
+              - s3:GetObject
+              - s3:GetObjectVersion
+              - s3:ListBucket
+            Resource:
+              - !GetAtt VendorPortalUserUploadsBucket.Arn
+              - !Sub "${VendorPortalUserUploadsBucket.Arn}/raw"
+              - !Sub "${VendorPortalUserUploadsBucket.Arn}/raw/*"                
+            Principal:
+              AWS: '*'
+            Condition:
+              ArnEquals:
+                'aws:PrincipalArn': 
+                  - Fn::ImportValue: !Sub "${IamStack}::VendorPortalEmptyRoleARN" 
+                  - !If 
+                    - IsEcsRoleFactoryApi
+                    - !Ref EcsRoleFactoryApi
+                    - !Ref "AWS::NoValue"                                  
+          - Sid: DenyFactoryServiceAccess
+            Effect: Deny
+            Action:
+              - 's3:Put*'
+              - 's3:Get*'
+            NotResource:
+              - !Sub "${VendorPortalUserUploadsBucket.Arn}/raw/*"
+            Principal:
+              AWS: '*'
+            Condition:
+              ArnEquals:
+                'aws:PrincipalArn': 
+                  - Fn::ImportValue: !Sub "${IamStack}::VendorPortalEmptyRoleARN"
+                  - !If 
+                    - IsEcsRoleFactoryApi
+                    - !Ref EcsRoleFactoryApi
+                    - !Ref "AWS::NoValue"
+          - Sid: AllowSOHIngestionLambdaAccess
+            Effect: Deny
+            NotAction:
+              - s3:PutObjectVersionTagging
+              - s3:PutObjectTagging
+              - s3:PutObject
+              - s3:PutObjectAcl
+              - s3:AbortMultipartUpload
+              - s3:GetObjectAcl
+              - s3:GetObject
+              - s3:GetObjectVersion
+              - s3:ListBucket
+            Resource:
+              - !GetAtt VendorPortalUserUploadsBucket.Arn
+              - !Sub "${VendorPortalUserUploadsBucket.Arn}/raw"
+              - !Sub "${VendorPortalUserUploadsBucket.Arn}/raw/*"
+              - !Sub "${VendorPortalUserUploadsBucket.Arn}/archive"
+              - !Sub "${VendorPortalUserUploadsBucket.Arn}/archive/*"
+            Principal:
+              AWS: '*'
+            Condition:
+              ArnEquals:
+                'aws:PrincipalArn': 
+                  - Fn::ImportValue: !Sub "${IamStack}::VendorPortalEmptyRoleARN" 
+                  - !If 
+                    - IsLambdaRoleStockOnHandIngestion   
+                    - !Ref LambdaRoleStockOnHandIngestion
+                    - !Ref "AWS::NoValue"                           
+          - Sid: DenySOHIngestionLambdaAccess1
+            Effect: Deny
+            Action:
+              - 's3:Put*'              
+            NotResource:
+              - !Sub "${VendorPortalUserUploadsBucket.Arn}/archive"
+              - !Sub "${VendorPortalUserUploadsBucket.Arn}/archive/*"
+            Principal:
+              AWS: '*'
+            Condition:
+              ArnEquals:
+                'aws:PrincipalArn': 
+                  - Fn::ImportValue: !Sub "${IamStack}::VendorPortalEmptyRoleARN" 
+                  - !If 
+                    - IsLambdaRoleStockOnHandIngestion   
+                    - !Ref LambdaRoleStockOnHandIngestion
+                    - !Ref "AWS::NoValue"
+          - Sid: DenySOHIngestionLambdaAccess2
+            Effect: Deny
+            Action:
+              - 's3:GetObject*'              
+            NotResource:
+              - !Sub "${VendorPortalUserUploadsBucket.Arn}/archive"
+              - !Sub "${VendorPortalUserUploadsBucket.Arn}/raw"            
+              - !Sub "${VendorPortalUserUploadsBucket.Arn}/archive/*"
+              - !Sub "${VendorPortalUserUploadsBucket.Arn}/raw/*"             
+            Principal:
+              AWS: '*'
+            Condition:
+              ArnEquals:
+                'aws:PrincipalArn': 
+                  - Fn::ImportValue: !Sub "${IamStack}::VendorPortalEmptyRoleARN" 
+                  - !If 
+                    - IsLambdaRoleStockOnHandIngestion   
+                    - !Ref LambdaRoleStockOnHandIngestion
+                    - !Ref "AWS::NoValue"
+          # - Sid: AllowAdminUserAccess #get only in raw & archive
+          #   Effect: Deny
+          #   NotAction:
+          #     - 's3:ListBucket'
+          #     - 's3:GetObject'
+          #     - 's3:GetObjectVersion'
+          #   Resource:
+          #     - !GetAtt VendorPortalUserUploadsBucket.Arn
+          #     - !Sub "${VendorPortalUserUploadsBucket.Arn}/raw"
+          #     - !Sub "${VendorPortalUserUploadsBucket.Arn}/raw/*"  
+          #     - !Sub "${VendorPortalUserUploadsBucket.Arn}/archive"
+          #     - !Sub "${VendorPortalUserUploadsBucket.Arn}/archive/*"                             
+          #   Principal:
+          #     AWS: '*'
+          #   Condition:
+          #     ArnEquals:
+          #       'aws:PrincipalArn': 
+          #         - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ADFS-${Environment}-vendorportal-global-admin' 
+                                        
+  VendorPortalSupplierDocumentsBucket:
+    Type: AWS::S3::Bucket    
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-s3-supplier-documents"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag      
+      BucketName: !Sub kmartau-vendorportal-supplier-documents-${Environment}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true      
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: !Ref SSEAlgo
+      LifecycleConfiguration:
+        Rules:
+          - Id: 7-days-expiry
+            Prefix: raw
+            Status: Enabled
+            ExpirationInDays: 7
+            NoncurrentVersionExpirationInDays: 7
+  VendorPortalSupplierDocumentsPolicy:
+    Type: AWS::S3::BucketPolicy    
+    Properties:
+      Bucket: !Ref VendorPortalSupplierDocumentsBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - !If #project-admin read access
+            - IsDev
+            - !Ref AWS::NoValue
+            - Sid: AllowRead
+              Effect: Deny
+              NotAction:
+                - 's3:List*'
+                - 's3:GetBucketPolicy'
+                - 's3:GetAccountPublicAccessBlock'
+                - 's3:GetBucketObjectOwnership'
+                - 's3:GetBucketAcl'
+                - 's3:GetBucketCORS'            
+              Resource:
+                - !GetAtt VendorPortalSupplierDocumentsBucket.Arn
+                - !Sub "${VendorPortalSupplierDocumentsBucket.Arn}/*"
+              Principal:
+                AWS: '*'
+              Condition:
+                ArnEquals:
+                  'aws:PrincipalArn':
+                    - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ADFS-${Environment}-vendorportal-global-admin'                     
+          - Sid: DenyDeleteBucketAccess
+            Effect: Deny
+            Action: 's3:DeleteBucket'
+            Resource:
+              - !GetAtt VendorPortalSupplierDocumentsBucket.Arn
+            Principal:
+              AWS: '*'         
+          - Sid: SecureOnly
+            Effect: Deny
+            Action: 's3:*'
+            Resource:
+              - !GetAtt VendorPortalSupplierDocumentsBucket.Arn
+              - !Sub "${VendorPortalSupplierDocumentsBucket.Arn}/*"
+            Principal:
+              AWS: '*'
+            Condition:
+              Bool:
+                'aws:SecureTransport': 'false'
+          - Sid: DenyUnencryptedPuts
+            Effect: Deny
+            Action: 's3:PutObject'
+            Resource: !Sub "${VendorPortalSupplierDocumentsBucket.Arn}/*"
+            Principal:
+              AWS: '*'
+            Condition:
+              'Null':
+                's3:x-amz-server-side-encryption': 'true'
+          - Sid: DenyAccessToAllExceptAllowedArns
+            Effect: Deny
+            Principal:
+              AWS: "*"
+            Action: 's3:*'
+            Resource:
+              - !GetAtt VendorPortalSupplierDocumentsBucket.Arn
+              - !Sub "${VendorPortalSupplierDocumentsBucket.Arn}/*"
+            Condition:
+              ArnNotEquals:
+                'aws:PrincipalArn':
+                  - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/infra-cfnrole-vendorportal-nonprivileged'                
+                  - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ADFS-${Environment}-vendorportal-global-admin'
+                  - !If 
+                    - IsEcsRoleSupplierApi
+                    - !Ref EcsRoleSupplierApi                    
+                    - !Ref "AWS::NoValue"
+          - !If # Restricted Admin access for nonprod and prod
+            - IsDev
+            - !Ref AWS::NoValue                     
+            - Sid: AllowRestrictedAdmin
+              Effect: Deny
+              NotAction:
+                - 's3:PutReplicationConfiguration'
+                - 's3:PutObjectVersionAcl'
+                - 's3:PutObjectRetention'
+                - 's3:PutObjectLegalHold'
+                - 's3:PutObjectAcl'
+                - 's3:PutMetricsConfiguration'
+                - 's3:PutLifecycleConfiguration'
+                - 's3:PutInventoryConfiguration'
+                - 's3:PutEncryptionConfiguration'
+                - 's3:PutBucketWebsite'
+                - 's3:PutBucketVersioning'
+                - 's3:PutBucketTagging'
+                - 's3:PutBucketRequestPayment'
+                - 's3:PutBucketPublicAccessBlock'
+                - 's3:PutBucketPolicy'
+                - 's3:PutBucketObjectLockConfiguration'
+                - 's3:PutBucketNotification'
+                - 's3:PutBucketLogging'
+                - 's3:PutBucketCORS'
+                - 's3:PutBucketAcl'
+                - 's3:PutAnalyticsConfiguration'
+                - 's3:PutAccelerateConfiguration'
+                - 's3:DeleteBucketWebsite'
+                - 's3:DeleteBucketPolicy'
+                - 's3:BypassGovernanceRetention'
+              Resource:
+                - !GetAtt VendorPortalSupplierDocumentsBucket.Arn
+                - !Sub "${VendorPortalSupplierDocumentsBucket.Arn}/*"
+              Principal:
+                AWS: '*'
+              Condition:
+                ArnEquals:
+                  'aws:PrincipalArn':
+                    - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/infra-cfnrole-vendorportal-nonprivileged'
+          - Sid: AllowSupplierServiceAccess
+            Effect: Deny
+            NotAction:
+              - s3:PutObjectVersionTagging
+              - s3:PutObjectTagging
+              - s3:PutObject
+              - s3:PutObjectAcl
+              - s3:AbortMultipartUpload
+              - s3:GetObjectAcl
+              - s3:GetObject
+              - s3:GetObjectVersion
+              - s3:ListBucket
+            Resource:
+              - !GetAtt VendorPortalSupplierDocumentsBucket.Arn
+              - !Sub "${VendorPortalSupplierDocumentsBucket.Arn}/*"                
+            Principal:
+              AWS: '*'
+            Condition:
+              ArnEquals:
+                'aws:PrincipalArn': 
+                  - Fn::ImportValue: !Sub "${IamStack}::VendorPortalEmptyRoleARN" 
+                  - !If 
+                    - IsEcsRoleSupplierApi
+                    - !Ref EcsRoleSupplierApi                   
+                    - !Ref "AWS::NoValue"      
+
+  VendorPortalFactoryDocumentsBucket:
+    Type: AWS::S3::Bucket    
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-s3-factory-documents"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag      
+      BucketName: !Sub kmartau-vendorportal-factory-documents-${Environment}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true      
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: !Ref SSEAlgo
+      LifecycleConfiguration:
+        Rules:
+          - Id: 7-days-expiry
+            Prefix: raw
+            Status: Enabled
+            ExpirationInDays: 7
+            NoncurrentVersionExpirationInDays: 7
+  VendorPortalFactoryDocumentsPolicy:
+    Type: AWS::S3::BucketPolicy    
+    Properties:
+      Bucket: !Ref VendorPortalFactoryDocumentsBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - !If #project-admin read access
+            - IsDev
+            - !Ref AWS::NoValue
+            - Sid: AllowRead
+              Effect: Deny
+              NotAction:
+                - 's3:List*'
+                - 's3:GetBucketPolicy'
+                - 's3:GetAccountPublicAccessBlock'
+                - 's3:GetBucketObjectOwnership'
+                - 's3:GetBucketAcl'
+                - 's3:GetBucketCORS'            
+              Resource:
+                - !GetAtt VendorPortalFactoryDocumentsBucket.Arn
+                - !Sub "${VendorPortalFactoryDocumentsBucket.Arn}/*"
+              Principal:
+                AWS: '*'
+              Condition:
+                ArnEquals:
+                  'aws:PrincipalArn':
+                    - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ADFS-${Environment}-vendorportal-global-admin'                     
+          - Sid: DenyDeleteBucketAccess
+            Effect: Deny
+            Action: 's3:DeleteBucket'
+            Resource:
+              - !GetAtt VendorPortalFactoryDocumentsBucket.Arn
+            Principal:
+              AWS: '*'         
+          - Sid: SecureOnly
+            Effect: Deny
+            Action: 's3:*'
+            Resource:
+              - !GetAtt VendorPortalFactoryDocumentsBucket.Arn
+              - !Sub "${VendorPortalFactoryDocumentsBucket.Arn}/*"
+            Principal:
+              AWS: '*'
+            Condition:
+              Bool:
+                'aws:SecureTransport': 'false'
+          - Sid: DenyUnencryptedPuts
+            Effect: Deny
+            Action: 's3:PutObject'
+            Resource: !Sub "${VendorPortalFactoryDocumentsBucket.Arn}/*"
+            Principal:
+              AWS: '*'
+            Condition:
+              'Null':
+                's3:x-amz-server-side-encryption': 'true'
+          - Sid: DenyAccessToAllExceptAllowedArns
+            Effect: Deny
+            Principal:
+              AWS: "*"
+            Action: 's3:*'
+            Resource:
+              - !GetAtt VendorPortalFactoryDocumentsBucket.Arn
+              - !Sub "${VendorPortalFactoryDocumentsBucket.Arn}/*"
+            Condition:
+              ArnNotEquals:
+                'aws:PrincipalArn':
+                  - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/infra-cfnrole-vendorportal-nonprivileged'                
+                  - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/ADFS-${Environment}-vendorportal-global-admin'
+                  - !If 
+                    - IsEcsRoleFactoryApi
+                    - !Ref EcsRoleFactoryApi
+                    - !Ref "AWS::NoValue"
+          - !If # Restricted Admin access for nonprod and prod
+            - IsDev
+            - !Ref AWS::NoValue                     
+            - Sid: AllowRestrictedAdmin
+              Effect: Deny
+              NotAction:
+                - 's3:PutReplicationConfiguration'
+                - 's3:PutObjectVersionAcl'
+                - 's3:PutObjectRetention'
+                - 's3:PutObjectLegalHold'
+                - 's3:PutObjectAcl'
+                - 's3:PutMetricsConfiguration'
+                - 's3:PutLifecycleConfiguration'
+                - 's3:PutInventoryConfiguration'
+                - 's3:PutEncryptionConfiguration'
+                - 's3:PutBucketWebsite'
+                - 's3:PutBucketVersioning'
+                - 's3:PutBucketTagging'
+                - 's3:PutBucketRequestPayment'
+                - 's3:PutBucketPublicAccessBlock'
+                - 's3:PutBucketPolicy'
+                - 's3:PutBucketObjectLockConfiguration'
+                - 's3:PutBucketNotification'
+                - 's3:PutBucketLogging'
+                - 's3:PutBucketCORS'
+                - 's3:PutBucketAcl'
+                - 's3:PutAnalyticsConfiguration'
+                - 's3:PutAccelerateConfiguration'
+                - 's3:DeleteBucketWebsite'
+                - 's3:DeleteBucketPolicy'
+                - 's3:BypassGovernanceRetention'
+              Resource:
+                - !GetAtt VendorPortalFactoryDocumentsBucket.Arn
+                - !Sub "${VendorPortalFactoryDocumentsBucket.Arn}/*"
+              Principal:
+                AWS: '*'
+              Condition:
+                ArnEquals:
+                  'aws:PrincipalArn':
+                    - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/infra-cfnrole-vendorportal-nonprivileged'
+          - Sid: AllowFactoryServiceAccess
+            Effect: Deny
+            NotAction:
+              - s3:PutObjectVersionTagging
+              - s3:PutObjectTagging
+              - s3:PutObject
+              - s3:PutObjectAcl
+              - s3:AbortMultipartUpload
+              - s3:GetObjectAcl
+              - s3:GetObject
+              - s3:GetObjectVersion
+              - s3:ListBucket
+            Resource:
+              - !GetAtt VendorPortalFactoryDocumentsBucket.Arn
+              - !Sub "${VendorPortalFactoryDocumentsBucket.Arn}/*"                
+            Principal:
+              AWS: '*'
+            Condition:
+              ArnEquals:
+                'aws:PrincipalArn': 
+                  - Fn::ImportValue: !Sub "${IamStack}::VendorPortalEmptyRoleARN" 
+                  - !If 
+                    - IsEcsRoleFactoryApi
+                    - !Ref EcsRoleFactoryApi
+                    - !Ref "AWS::NoValue"      
+Outputs:
+  VendorPortalLogBucket:
+    Description: S3 bucket Name for vendor portal logs archival
+    Value: !Ref VendorPortalLogBucket
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalLogBucketName
+  VendorPortalLogBucketArn:
+    Description: S3 bucket ARN for vendor portal logs archival
+    Value: !GetAtt VendorPortalLogBucket.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalLogBucketArn
+  VendorPortalArtifactBucket:
+    Description: Name S3 bucket for vendor portal artifacts
+    Value: !Ref VendorPortalArtifactBucket
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalArtifactBucketName
+  VendorPortalArtifactBucketArn:
+    Description: ARN of S3 bucket for vendor portal artifacts
+    Value: !GetAtt VendorPortalArtifactBucket.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalArtifactBucketArn
+  VendorPortalEventBucket:
+    Description: Name S3 bucket for vendor portal events
+    Value: !Ref VendorPortalEventBucket
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalEventBucketName
+  VendorPortalEventBucketArn:
+    Description: ARN of S3 bucket for vendor portal events
+    Value: !GetAtt VendorPortalEventBucket.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalEventBucketArn
+  VendorPortalUserUploadsBucket:
+    Description: Name S3 bucket for vendor portal user uploads
+    Value: !Ref VendorPortalUserUploadsBucket
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalUserUploadsBucketName      
+  VendorPortalUserUploadsBucketArn:
+    Description: ARN of S3 bucket for vendor portal events
+    Value: !GetAtt VendorPortalUserUploadsBucket.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalUserUploadsBucketArn  
+  VendorPortalSupplierDocumentsBucket:
+    Description: Name S3 bucket for vendor portal supplier documents
+    Value: !Ref VendorPortalSupplierDocumentsBucket
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalSupplierDocumentsBucketName      
+  VendorPortalSupplierDocumentsBucketArn:
+    Description: ARN of S3 bucket for vendor portal supplier documents
+    Value: !GetAtt VendorPortalSupplierDocumentsBucket.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalSupplierDocumentsBucketArn
+  
+  VendorPortalFactoryDocumentsBucket:
+    Description: Name S3 bucket for vendor portal Factory documents
+    Value: !Ref VendorPortalFactoryDocumentsBucket
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalFactoryDocumentsBucketName      
+  VendorPortalFactoryDocumentsBucketArn:
+    Description: ARN of S3 bucket for vendor portal Factory documents
+    Value: !GetAtt VendorPortalFactoryDocumentsBucket.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalFactoryDocumentsBucketArn      
+ 

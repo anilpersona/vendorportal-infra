@@ -1,0 +1,249 @@
+#!/usr/bin/env groovy
+pipeline {
+  agent any
+
+  environment {
+    AWS_REGION = 'ap-southeast-2'
+    AWS_DEV_ACC="187628286232"
+    AWS_NONPROD_ACC="318263296841"
+    AWS_PROD_ACC="563000599290"
+    SLACK_NOTIFY_CHANNEL = "C020ES5TMNY"
+    PROJECT = 'vendorportal'
+    RETAIN_BRANCH_DEPLOY = 'no'
+    TIMESTAMP =  sh (
+      script: 'date -u +"%Y-%b-%d-%H-%M-%S"',
+      returnStdout: true
+    ).trim()
+  }
+
+  // options {
+  //   //skipDefaultCheckout(true) // Comment this if running the build stage for the first time
+  //   disableConcurrentBuilds() // Prevent name collisions
+  // }
+
+  stages {
+    stage ('Choose Function') {
+      steps {
+        script {
+          typeData=typeInput()
+          env.AWSENV=typeData['AWS_ENVIRONMENT'].toLowerCase()
+          env.LIST_ALL_SECRETS=typeData['LIST_ALL_SECRETS']
+          env.DOCDB_SECRET=typeData['DOCDB_SECRET']
+          env.RDS_SECRET=typeData['RDS_SECRET']
+          env.OTHER_SECRET=typeData['OTHER_SECRET']
+          echo("-----${AWSENV}---${LIST_ALL_SECRETS}---${DOCDB_SECRET}---${RDS_SECRET}----${OTHER_SECRET}")          
+        }
+      }
+    }
+    stage('List Secrets') {
+      when {
+        expression { return BRANCH_NAME =~ 'main|feature.*' }
+        anyOf {
+          environment name: 'LIST_ALL_SECRETS', value: "true"
+        }
+      }
+      steps {
+        script {
+          node {
+            checkout scm
+            withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',credentialsId: "${env.PROJECT}-aws-${AWSENV}"]]) {
+              docker.image("${ECR_HOST}/${PROJECT}/pythonsdk-aws:latest").inside {
+                manageSecret(typeData)
+              } 
+            }
+          }
+        }
+      }
+    }
+    stage ('Document db secret: Input') {
+      when {
+        expression { return BRANCH_NAME =~ 'main|feature.*' }
+        anyOf {
+          environment name: 'DOCDB_SECRET', value: "true"
+        }
+      }      
+      steps {
+        script {
+          userData=getInputDb()
+          typeData['LIST_ALL_SECRETS']='false'
+          userData=userData+typeData
+          payloadData=form_payload(userData)
+        }
+      }
+    }    
+    stage('Document db secret: Create') {
+      when {
+        expression { return BRANCH_NAME =~ 'main|feature.*' }
+        anyOf {
+          environment name: 'DOCDB_SECRET', value: "true"
+        }
+      }
+      steps {
+        script {
+          node {
+            deleteDir()
+            checkout scm
+            withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',credentialsId: "${env.PROJECT}-aws-${AWSENV}"]]) {
+              docker.image("${ECR_HOST}/${PROJECT}/pythonsdk-aws:latest").inside {
+                manageSecret(userData,payloadData)
+
+              } 
+            }
+          }
+        }
+      }
+    }
+  stage ('Other secret: Input') {
+      when {
+        expression { return BRANCH_NAME =~ 'main|feature.*' }
+        anyOf {
+          environment name: 'OTHER_SECRET', value: "true"
+        }
+      }      
+      steps {
+        script {
+          userData=getInputOther()
+          typeData['LIST_ALL_SECRETS']='false'
+          userData=userData+typeData
+          payloadData=form_payload(userData)
+        }
+      }
+    }    
+    stage('Other secret: Create') {
+      when {
+        expression { return BRANCH_NAME =~ 'main|feature.*' }
+        anyOf {
+          environment name: 'OTHER_SECRET', value: "true"
+        }
+      }
+      steps {
+        script {
+          node {
+            checkout scm
+            withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',credentialsId: "${env.PROJECT}-aws-${AWSENV}"]]) {
+              docker.image("${ECR_HOST}/${PROJECT}/pythonsdk-aws:latest").inside {
+                manageSecret(userData,payloadData)
+
+              } 
+            }
+          }
+        }
+      }
+    }    
+  }
+  post {
+    always {
+      script {
+        if (BRANCH_NAME == 'main') {
+          CALLOUT = '@here '
+        } else {
+          CALLOUT = ''
+        }
+      }
+    }
+    success {
+      slackSend(
+        color: 'good',
+        channel: "${env.SLACK_NOTIFY_CHANNEL}",
+        message: ":green_tick: SUCCESS: Job - <${env.JOB_DISPLAY_URL}|${env.JOB_NAME} #${env.BUILD_NUMBER}>"
+      )
+    }
+    failure {
+      slackSend(
+        color: 'danger',
+        channel: "${env.SLACK_NOTIFY_CHANNEL}",
+        message: "${CALLOUT}:red_cross: FAILURE: Job - <${env.JOB_DISPLAY_URL}|${env.JOB_NAME} #${env.BUILD_NUMBER}>"
+      )
+    }
+    unstable {
+      slackSend(
+        color: 'warning',
+        channel: "${env.SLACK_NOTIFY_CHANNEL}",
+        message: "${CALLOUT} UNSTABLE: Job - <${env.JOB_DISPLAY_URL}|${env.JOB_NAME} #${env.BUILD_NUMBER}>"
+      )
+    }
+    aborted {
+      slackSend(
+        color: 'warning',
+        channel: "${env.SLACK_NOTIFY_CHANNEL}",
+        message: "${CALLOUT}:black_circle: ABORTED: Job - <${env.JOB_DISPLAY_URL}|${env.JOB_NAME} #${env.BUILD_NUMBER}>"
+      )
+    }
+  }
+}
+def getInputDb() {
+  def userInput = input(
+                    id: 'create_secret_db',
+                    message: 'Enter details',
+                    ok: 'ok',
+                    parameters:
+                    [
+                      string(defaultValue: "${PROJECT}dbcluster-6pycmgfxywty", description: 'Enter database identifier', name: 'sec_param_dbi'),
+                      string(defaultValue: "/${PROJECT}/secret/one", description: 'Enter a parameter name or path', name: 'sec_param_path'),
+                      string(defaultValue: "${PROJECT} secret", description: 'Enter description of the secret', name: 'sec_param_desc'),
+                      password(defaultValue: '{"username":"<>","password":"<>"}', description: 'Enter db username and password', name: 'sec_param_val')
+                    ]
+                  );
+  userInput.TimeStamp=TIMESTAMP;
+  println ("DB ${userInput['sec_param_dbi']}");
+  println ("Secert path ${userInput['sec_param_path']}");
+  println ("UTC TimeStamp: ${userInput['TimeStamp']}");
+  return userInput
+}
+def getInputOther() {
+  def userInput = input(
+                    id: 'create_secret_other',
+                    message: 'Enter details',
+                    ok: 'ok',
+                    parameters:
+                    [                      
+                      string(defaultValue: "/${PROJECT}/secret/one", description: 'Enter a parameter name or path', name: 'sec_param_path'),
+                      password(defaultValue: 'secret@123', description: 'Enter db username and password', name: 'sec_param_val')
+                    ]
+                  );
+  userInput.TimeStamp=TIMESTAMP;
+  println ("Secert path ${userInput['sec_param_path']}");
+  println ("UTC TimeStamp: ${userInput['TimeStamp']}");
+  return userInput
+}
+def typeInput() {
+  def userInput = input(
+                    id: 'op_type',
+                    message: 'Provide inputs',
+                    ok: 'ok',
+                    parameters:
+                    [
+                      choice(choices: ["Dev","Nonprod","Prod"].join("\n"), description: 'Choose the Deployment Environment', name: 'AWS_ENVIRONMENT'),
+                      booleanParam(defaultValue: false, description: 'check to list all secrets keys', name: 'LIST_ALL_SECRETS'),
+                      booleanParam(defaultValue: false, description: 'Create or Update a DocumentDb secret', name: 'DOCDB_SECRET'),
+                      booleanParam(defaultValue: false, description: 'Create or Update a DocumentDb secret', name: 'RDS_SECRET'),
+                      booleanParam(defaultValue: false, description: 'Create or Update other secret', name: 'OTHER_SECRET')
+                    ]
+                  );
+  userInput.TimeStamp=TIMESTAMP;
+  println ("Environment: ${userInput['AWS_ENVIRONMENT']}");
+  println ("List: ${userInput['LIST_ALL_SECRETS']}");
+  println ("Create: ${userInput['DOCDB_SECRET']}");
+  println ("Create: ${userInput['RDS_SECRET']}");
+  println ("Create: ${userInput['OTHER_SECRET']}");
+  println ("UTC TimeStamp: ${userInput['TimeStamp']}");
+  return userInput
+}
+def manageSecret(param_data,payload_data=1) {
+  sh "chmod +x ./scripts/manage_secret.py"
+  sh """
+    set +x
+    python3 ./scripts/manage_secret.py '${param_data}' '${payload_data}'
+  """
+}
+
+def form_payload(rawData) {
+  payload=[:]
+  rawData.each {
+    key,value -> 
+    if(key == 'sec_param_val') {
+      payload.put(key,value)
+    }
+  }
+  return payload  
+}

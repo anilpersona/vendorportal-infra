@@ -1,0 +1,352 @@
+
+---
+AWSTemplateFormatVersion: "2010-09-09"
+# yamllint disable rule:line-length
+Description: >
+    Vendorportal ECS Cluster - ALB that exposes our various ECS services.
+Parameters:
+  EnableDevAccess:
+    Default: "false"
+    Type: String
+  BillingTag:
+    Default: "vendorportal"
+    Type: "String"
+  OwnerTag:
+    Default: "vendorportal"
+    Type: "String"
+  ProjectTag:
+    Default: "vendorportal"
+    Type: "String"
+  Environment:
+    Default: "dev"
+    AllowedValues: [dev, prod, nonprod]
+    Type: "String"
+  EnvironmentName:
+    Description: An environment name that will be prefixed to resource names
+    Type: String
+  SgStack:
+    Description: StackName without the component name
+    Type: String
+  S3Stack:
+    Description: StackName without the component name
+    Type: String
+  VpcBaseStack:
+    Type: String
+    AllowedPattern: '[A-Za-z][A-Za-z0-9-]{0,127}'  
+  PublicALBCertificateArn:
+    Type: String
+  InternalALBCertificateArn:
+    Type: String
+Conditions:
+  EnableDevAccess: !Equals [ !Ref EnableDevAccess, "true" ]
+
+Resources:
+  VendorportalPublicALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: application         
+      Subnets:
+        - Fn::ImportValue: !Sub "${VpcBaseStack}::SubnetIdPublicAz2"
+        - Fn::ImportValue: !Sub "${VpcBaseStack}::SubnetIdPublicAz3"
+        - Fn::ImportValue: !Sub "${VpcBaseStack}::SubnetIdPublicAz1"
+      SecurityGroups:      
+        - !If
+            - EnableDevAccess
+            - Fn::ImportValue: !Sub "${SgStack}::VendorportalPublicALBDevSecurityGroup"
+            - !Ref AWS::NoValue
+        - Fn::ImportValue: !Sub "${SgStack}::VendorportalPublicALBCFSecurityGroup"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-ecs-alb-public"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag
+      LoadBalancerAttributes:
+        - Key: access_logs.s3.enabled
+          Value: 'true'
+        - Key: access_logs.s3.bucket
+          Value: 
+            Fn::ImportValue: !Sub "${S3Stack}::VendorPortalLogBucketName"
+        - Key: access_logs.s3.prefix
+          Value: public_alb
+        - Key: idle_timeout.timeout_seconds
+          Value: '100'
+  # VendorportalPublicALBHttpListener:
+  #   Type: AWS::ElasticLoadBalancingV2::Listener
+  #   Properties:
+  #     LoadBalancerArn: !Ref VendorportalPublicALB
+  #     Port: 80
+  #     Protocol: HTTP
+  #     DefaultActions:
+  #       - Type: fixed-response              
+  #         FixedResponseConfig: 
+  #             ContentType: text/plain
+  #             MessageBody: Vendorportal
+  #             StatusCode: '200'
+  VendorportalPublicALBHttpsListener:
+    Type: "AWS::ElasticLoadBalancingV2::Listener"
+    Properties:
+      LoadBalancerArn: !Ref VendorportalPublicALB
+      Port: 443
+      Protocol: HTTPS
+      SslPolicy: ELBSecurityPolicy-TLS-1-2-Ext-2018-06
+      Certificates:
+        - CertificateArn: !Ref PublicALBCertificateArn
+      DefaultActions:
+        - Type: fixed-response              
+          FixedResponseConfig: 
+              ContentType: text/plain
+              MessageBody: 'Access denied'
+              StatusCode: '403'        
+        # - Type: forward
+        #   TargetGroupArn: !Ref DefaultHttpsTargetGroup
+  VendorportalPublicALBDNS:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      HostedZoneId: !ImportValue "infra-r53-zones-region::PublicZoneId"
+      Comment: "A Record for vendorportal public ALB"
+      Name:
+        !Join
+        - "."
+        - - api-vendors          
+          - !ImportValue "infra-r53-zones-region::PublicZoneName"
+      Type: "A"
+      AliasTarget:
+        HostedZoneId: 
+          !Sub "${VendorportalPublicALB.CanonicalHostedZoneID}"
+        DNSName: 
+           !Sub "${VendorportalPublicALB.DNSName}"      
+  VendorportalInternalALB:
+    Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
+    Properties:
+      Type: application
+      Scheme: internal
+      SecurityGroups:
+        - Fn::ImportValue: !Sub "${SgStack}::VendorportalInternalALBSecurityGroup"
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-ecs-alb-internal"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+      Subnets:
+        - Fn::ImportValue: !Sub "${VpcBaseStack}::SubnetIdPrivateAz1"
+        - Fn::ImportValue: !Sub "${VpcBaseStack}::SubnetIdPrivateAz2"
+        - Fn::ImportValue: !Sub "${VpcBaseStack}::SubnetIdPrivateAz3"
+      LoadBalancerAttributes:
+        - Key: access_logs.s3.enabled
+          Value: 'true'
+        - Key: access_logs.s3.bucket
+          Value: 
+            Fn::ImportValue: !Sub "${S3Stack}::VendorPortalLogBucketName"
+        - Key: access_logs.s3.prefix
+          Value: internal_alb
+        - Key: idle_timeout.timeout_seconds
+          Value: '100'
+  # VendorportalInternalALBHttpListener:
+  #     Type: AWS::ElasticLoadBalancingV2::Listener
+  #     Properties:
+  #         LoadBalancerArn: !Ref VendorportalInternalALB
+  #         Port: 80
+  #         Protocol: HTTP
+  #         DefaultActions:
+  #             - Type: redirect
+  #               RedirectConfig:
+  #                 Protocol: HTTPS
+  #                 Port: "443"
+  #                 Host: '#{host}'
+  #                 Path: '/#{path}'
+  #                 Query: '#{query}'
+  #                 StatusCode: HTTP_301
+  VendorportalInternalALBHttpsListener:
+    Type: "AWS::ElasticLoadBalancingV2::Listener"
+    Properties:
+      LoadBalancerArn: !Ref VendorportalInternalALB
+      Port: 443
+      Protocol: HTTPS
+      SslPolicy: ELBSecurityPolicy-TLS-1-2-Ext-2018-06
+      Certificates:
+        - CertificateArn: !Ref InternalALBCertificateArn
+      DefaultActions:
+        - Type: fixed-response              
+          FixedResponseConfig: 
+              ContentType: text/plain
+              MessageBody: 'Access denied'
+              StatusCode: '403'  
+  VendorportalInteranlALBDNS:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      HostedZoneId: !ImportValue "infra-r53-zones-region::PrivateZoneId"
+      Comment: "A Record for vendorportal internal ALB"
+      Name:
+        !Join
+        - "."
+        - - api-vendors          
+          - !ImportValue "infra-r53-zones-region::PrivateZoneName"
+      Type: "A"
+      AliasTarget:
+        HostedZoneId: !GetAtt VendorportalInternalALB.CanonicalHostedZoneID
+        DNSName: !GetAtt VendorportalInternalALB.DNSName
+
+  # DefaultTargetGroup:
+  #     Type: AWS::ElasticLoadBalancingV2::TargetGroup
+  #     Properties:
+  #         Name: Vendorportal-ecs-cluster-default
+  #         VpcId:
+  #           Fn::ImportValue: !Sub "${VpcBaseStack}::VpcId"
+  #         Port: 80
+  #         Protocol: HTTP
+  #         Tags:
+  #           - Key: Name
+  #             Value: !Sub "${AWS::StackName}-ecs-tg"
+  #           - Key: Billing
+  #             Value: !Ref BillingTag
+  #           - Key: Environment
+  #             Value: !Ref Environment        
+  #           - Key: Owner
+  #             Value: !Ref OwnerTag
+  #           - Key: Project
+  #             Value: !Ref ProjectTag
+
+
+  # DefaultTargetGroupInternal:
+  #     Type: AWS::ElasticLoadBalancingV2::TargetGroup
+  #     Properties:
+  #         Name: Vendorportal-http-default
+  #         VpcId:
+  #           Fn::ImportValue: !Sub "${VpcBaseStack}::VpcId"
+  #         Port: 80
+  #         Protocol: HTTP
+  #         Tags:
+  #           - Key: Name
+  #             Value: !Sub "${AWS::StackName}-ecs-tg"
+  #           - Key: Billing
+  #             Value: !Ref BillingTag
+  #           - Key: Environment
+  #             Value: !Ref Environment        
+  #           - Key: Owner
+  #             Value: !Ref OwnerTag
+  #           - Key: Project
+  #             Value: !Ref ProjectTag
+
+
+  # DefaultHttpsTargetGroup:
+  #     Type: AWS::ElasticLoadBalancingV2::TargetGroup
+  #     Properties:
+  #         Name: Vendorportal-https-default
+  #         VpcId:
+  #           Fn::ImportValue: !Sub "${VpcBaseStack}::VpcId"
+  #         Port: 443
+  #         Protocol: HTTPS
+  #         Tags:
+  #           - Key: Name
+  #             Value: !Sub "${AWS::StackName}-ecs-tg"
+  #           - Key: Billing
+  #             Value: !Ref BillingTag
+  #           - Key: Environment
+  #             Value: !Ref Environment        
+  #           - Key: Owner
+  #             Value: !Ref OwnerTag
+  #           - Key: Project
+  #             Value: !Ref ProjectTag
+
+  # DefaultInternalHttpsTargetGroup:
+  #     Type: AWS::ElasticLoadBalancingV2::TargetGroup
+  #     Properties:
+  #         Name: Vendorportal-internal-default
+  #         VpcId:
+  #           Fn::ImportValue: !Sub "${VpcBaseStack}::VpcId"
+  #         Port: 443
+  #         Protocol: HTTPS
+  #         Tags:
+  #           - Key: Name
+  #             Value: !Sub "${AWS::StackName}-ecs-tg"
+  #           - Key: Billing
+  #             Value: !Ref BillingTag
+  #           - Key: Environment
+  #             Value: !Ref Environment        
+  #           - Key: Owner
+  #             Value: !Ref OwnerTag
+  #           - Key: Project
+  #             Value: !Ref ProjectTag
+
+
+Outputs:
+
+  VendorportalPublicALB:
+    Description: A reference to the Application Load Balancer
+    Value: !Ref VendorportalPublicALB
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalPublicALB
+
+  VendorportalPublicALBZone:
+    Description: A reference to the Application Load Balancer zone
+    Value: !GetAtt VendorportalPublicALB.CanonicalHostedZoneID
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalPublicALBZone
+  
+  VendorportalPublicALBFullName:
+    Description: A reference to the Application Load Balancer fullname
+    Value: !GetAtt VendorportalPublicALB.LoadBalancerFullName
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalPublicALBFullName
+
+  VendorportalPublicALBUrl:
+    Description: The URL of the ALB
+    Value: !GetAtt VendorportalPublicALB.DNSName
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalPublicALBUrl
+
+  VendorportalPublicALBHttpsListener:
+    Description: A reference to a port 443 listener
+    Value: !Ref VendorportalPublicALBHttpsListener
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalPublicALBHttpsListener
+
+  VendorportalInternalALB:
+    Description: A reference to the Internal Application Load Balancer
+    Value: !Ref VendorportalInternalALB
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalInternalALB
+
+  VendorportalInternalALBFullName:
+    Description: A reference to the Application internal Load Balancer fullname
+    Value: !GetAtt VendorportalInternalALB.LoadBalancerFullName
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalInternalALBFullName
+
+  VendorportalInternalALBUrl:
+    Description: The URL of the Internal ALB
+    Value: !GetAtt VendorportalInternalALB.DNSName
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalInternalALBUrl
+
+  VendorportalInternalALBZone:
+    Description: A reference to the Application Internal Load Balancer zone
+    Value: !GetAtt VendorportalInternalALB.CanonicalHostedZoneID
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalInternalALBZone
+
+  # VendorportalInternalALBListener:
+  #   Description: A reference to a port 80 listener
+  #   Value: !Ref VendorportalInternalALBHttpListener
+  #   Export:
+  #     Name: !Sub ${AWS::StackName}::VendorportalInternalALBHttpListener
+
+  VendorportalInternalALBHttpsListener:
+    Description: A reference to a port 443 listener
+    Value: !Ref VendorportalInternalALBHttpsListener
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalInternalALBHttpsListener
+
+      

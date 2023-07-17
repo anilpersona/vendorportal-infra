@@ -1,0 +1,68 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Track status of cmd data download DynamoDB table
+Parameters:
+  BillingTag:
+    Default: "vendorportal"
+    Type: "String"
+  OwnerTag:
+    Default: "vendorportal"
+    Type: "String"
+  ProjectTag:
+    Default: "vendorportal"
+    Type: "String"
+  Environment:
+    Default: "dev"
+    AllowedValues: [dev, prod, nonprod]
+    Type: "String"
+
+Conditions:
+  IsProd: !Equals [ !Ref Environment, "prod" ]
+
+Resources: 
+  VendorportalCmdDataDyDBTable: 
+    Type: AWS::DynamoDB::Table
+    UpdateReplacePolicy: Delete
+    Properties: 
+      BillingMode: 
+        !If 
+          - IsProd
+          - PAY_PER_REQUEST
+          - PROVISIONED          
+      SSESpecification:
+        KMSMasterKeyId: !Sub alias/${ProjectTag}/general
+        SSEEnabled: true
+        SSEType: KMS
+      PointInTimeRecoverySpecification:
+         PointInTimeRecoveryEnabled: true
+      AttributeDefinitions: 
+        - AttributeName: "task_id"
+          AttributeType: "S"
+      KeySchema: 
+        - AttributeName: "task_id"
+          KeyType: "HASH"
+      ProvisionedThroughput:
+        !If 
+          - IsProd
+          - !Ref AWS::NoValue
+          - ReadCapacityUnits: 5
+            WriteCapacityUnits: 5
+
+      TableName: !Sub "${ProjectTag}-cmd-download-status-${Environment}"
+      Tags:
+          - Key: Name
+            Value: !Sub "${ProjectTag}-cmd-download-status-${Environment}"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+
+Outputs:
+  VendorportalCmdDataDyDBTable:
+    Description: A reference to the Table name
+    Value: !Ref VendorportalCmdDataDyDBTable
+    Export:
+      Name: !Sub ${AWS::StackName}::TableName

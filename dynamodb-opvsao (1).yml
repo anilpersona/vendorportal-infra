@@ -1,0 +1,89 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Creates Order comparison DynamoDB table
+Parameters:
+  BillingTag:
+    Default: "vendorportal"
+    Type: "String"
+  OwnerTag:
+    Default: "vendorportal"
+    Type: "String"
+  ProjectTag:
+    Default: "vendorportal"
+    Type: "String"
+  Environment:
+    Default: "dev"
+    AllowedValues: [dev, prod, nonprod]
+    Type: "String"
+
+
+Conditions:  
+  IsProd: !Equals [ !Ref Environment, "prod" ]
+
+Resources: 
+  VendorportalOrderComparisonDyDBTable: 
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete # Works 
+    Properties:
+      BillingMode: 
+        !If 
+          - IsProd
+          - PAY_PER_REQUEST
+          - PROVISIONED          
+      SSESpecification:
+        KMSMasterKeyId: !Sub alias/${ProjectTag}/general
+        SSEEnabled: true
+        SSEType: KMS
+      PointInTimeRecoverySpecification:
+         PointInTimeRecoveryEnabled: true
+      AttributeDefinitions: 
+        - 
+          AttributeName: "batch_id"
+          AttributeType: "S"
+        - 
+          AttributeName: "order_date"
+          AttributeType: "S"
+      KeySchema: 
+        - 
+          AttributeName: "batch_id"
+          KeyType: "HASH"
+      ProvisionedThroughput:
+        !If 
+          - IsProd
+          - !Ref AWS::NoValue
+          - ReadCapacityUnits: 5
+            WriteCapacityUnits: 5
+      GlobalSecondaryIndexes: 
+        - 
+          IndexName: "order_date-index"
+          KeySchema: 
+            - 
+              AttributeName: "order_date"
+              KeyType: "HASH"
+          Projection:
+            ProjectionType: "ALL"
+          ProvisionedThroughput:
+            !If 
+              - IsProd
+              - !Ref AWS::NoValue
+              - ReadCapacityUnits: 5
+                WriteCapacityUnits: 5
+      TableName: !Sub "${ProjectTag}-opvsao-${Environment}"
+      Tags:
+          - Key: Name
+            Value: !Sub "${ProjectTag}-opvsao-${Environment}"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+
+Outputs:
+  VendorportalOrderComparisonDyDBTable:
+    Description: A reference to the Table name
+    Value: !Ref VendorportalOrderComparisonDyDBTable
+    Export:
+      Name: !Sub ${AWS::StackName}::TableName

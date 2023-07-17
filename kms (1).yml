@@ -1,0 +1,959 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "vendorportal keys setup"
+Parameters:
+  DssUser:
+    Type: String
+    Default: ""
+  DssUser1:
+    Type: String
+    Default: ""
+  EcsRoleCommon:
+    Type: String
+    Default: ""
+  EcsRoleOrdersPoller:
+    Type: String
+    Default: ""
+  EcsAppsOnboardingApi:
+    Type: String
+    Default: ""
+  EcsRoleIdentityMgmtApi:
+    Type: String
+    Default: ""
+  EcsRoleOrderProjectionApi:
+    Type: String
+    Default: ""
+  EcsRoleStockInHandApi:
+    Type: String
+    Default: ""
+  EcsRoleReportingApi:
+    Type: String
+    Default: ""
+  EcsRoleProductApi:
+    Type: String
+    Default: ""    
+  EcsRoleSupplierApi:    
+    Type: String
+    Default: ""
+  EcsRoleFactoryApi:    
+    Type: String
+    Default: ""
+  EcsRoleProductComponentApi:
+    Type: String
+    Default: ""
+  EcsRoleAuthApi:
+    Type: String
+    Default: ""
+  EcsRoleFacadeApi:
+    Type: String
+    Default: ""
+  EcsRoleMdmApi:
+    Type: String
+    Default: ""
+  EcsRoleGmCommitmentDataApi:
+    Type: String
+    Default: ""                
+  EcsRoleCommitmentDataApi:
+    Type: String
+    Default: ""
+  EcsRoleSupplierRegistrationApi:
+    Type: String
+    Default: ""
+  LambdaRolePclEventPublisher:
+    Type: String
+    Default: ""
+  LambdaRoleSupplierMapping:
+    Type: String
+    Default: ""
+  LambdaRoleDssSfrsEventPublish:
+    Type: String
+    Default: ""
+  LambdaRoleSfrsSupplierNotification:
+    Type: String
+    Default: ""
+  LambdaRoleSfrsFactoryNotification:
+    Type: String
+    Default: ""
+  LambdaRoleIdentityManagementSync:
+    Type: String
+    Default: ""   
+  LambdaRoleDocdbSecRot:
+    Type: String
+    Default: "" 
+  LamdaRoleOpvsoaInitiatorV2:
+    Type: String
+    Default: "" 
+  LamdaRoleOpvsoaBuilderV2:
+    Type: String
+    Default: ""
+  LambdaRoleStepSohSch:
+    Type: String
+    Default: ""
+  LamdaRoleSohStep:
+    Type: String
+    Default: ""
+  LamdaRoleCommitmentdataExportHandler:
+    Type: String
+    Default: ""
+  LamdaRoleECSNotify:
+    Type: String
+    Default: ""
+  LamdaRoleSohHistoricalDataPush:
+    Type: String
+    Default: ""
+  LamdaRoleSupplierEventPublisher:
+    Type: String
+    Default: ""    
+  LamdaRoleFactoryEventPublisher:
+    Type: String
+    Default: ""
+  LambdaRoleCommitmentDataHandler:
+    Type: String
+    Default: "" 
+  LamdaRoleSupplierInvitation:
+    Type: String
+    Default: "" 
+  LamdaRoleOpvsoaInitiator:
+    Type: String
+    Default: "" 
+  LamdaRoleOpvsoaBuilder:
+    Type: String
+    Default: ""     
+  LambdaRoleStepSohSsmChange:
+    Type: String
+    Default: "" 
+  LambdaRoleStepSoh:
+    Type: String
+    Default: ""    
+  TestLambdaStack:
+    Type: String
+    Default: ""
+  LambdaRoleStockOnHandIngestion:
+    Type: String
+    Default: ""
+  LamdaRoleSohDataPublish:  
+    Type: String
+    Default: ""
+  IamStack:
+    Type: String
+  BillingTag:
+    Default: "vendorportal"
+    Type: "String"
+  OwnerTag:
+    Default: "vendorportal"
+    Type: "String"
+  ProjectTag:
+    Default: "vendorportal"
+    Type: "String"
+  Environment:
+    Default: "dev"
+    AllowedValues: [dev, prod, nonprod]
+    Type: "String"
+    ConstraintDescription: must specify prod, dev, or nonprod.
+  AccountId:
+    Type: String
+
+Conditions:
+  IsDev: !Equals [ !Ref Environment, "dev" ]
+  IsTestLambdaStack: !Not [!Equals [ !Ref TestLambdaStack, "" ]]
+  IsLambdaRolePclEventPublisher: !Not [!Equals [ !Ref LambdaRolePclEventPublisher, "" ]]
+  IsLambdaRoleSupplierMapping: !Not [!Equals [ !Ref LambdaRoleSupplierMapping, "" ]]
+  IsLambdaRoleStockOnHandIngestion: !Not [!Equals [ !Ref LambdaRoleStockOnHandIngestion, "" ]]  
+  IsEcsRoleStockInHandApi: !Not [!Equals [ !Ref EcsRoleStockInHandApi, "" ]] 
+  IsEcsRoleReportingApi: !Not [!Equals [ !Ref EcsRoleReportingApi, "" ]]
+  IsEcsRoleProductApi: !Not [!Equals [ !Ref EcsRoleProductApi, "" ]]
+  IsEcsRoleSupplierApi: !Not [!Equals [ !Ref EcsRoleSupplierApi, "" ]]
+  IsEcsRoleFactoryApi: !Not [!Equals [ !Ref EcsRoleFactoryApi, "" ]]
+  IsLambdaRoleStepSoh: !Not [!Equals [ !Ref LambdaRoleStepSoh, "" ]]  
+  IsLambdaRoleStepSohSsmChange: !Not [!Equals [ !Ref LambdaRoleStepSohSsmChange, "" ]]
+  IsLamdaRoleSohDataPublish: !Not [!Equals [ !Ref LamdaRoleSohDataPublish, "" ]] 
+  IsLamdaRoleOpvsoaInitiator: !Not [!Equals [ !Ref LamdaRoleOpvsoaInitiator, "" ]] 
+  IsLamdaRoleOpvsoaBuilder: !Not [!Equals [ !Ref LamdaRoleOpvsoaBuilder, "" ]]
+  IsLamdaRoleSupplierInvitation: !Not [!Equals [ !Ref LamdaRoleSupplierInvitation, "" ]]
+  IsLambdaRoleCommitmentDataHandler: !Not [!Equals [ !Ref LambdaRoleCommitmentDataHandler, "" ]]
+  IsEcsRoleCommitmentDataApi: !Not [!Equals [ !Ref EcsRoleCommitmentDataApi, "" ]]
+  IsLamdaRoleSupplierEventPublisher: !Not [!Equals [ !Ref LamdaRoleSupplierEventPublisher, "" ]]
+  IsLamdaRoleFactoryEventPublisher: !Not [!Equals [ !Ref LamdaRoleFactoryEventPublisher, "" ]]    
+  IsLamdaRoleSohHistoricalDataPush: !Not [!Equals [ !Ref LamdaRoleSohHistoricalDataPush, "" ]]
+  IsLamdaRoleECSNotify: !Not [!Equals [ !Ref LamdaRoleECSNotify, "" ]]
+  IsLamdaRoleCommitmentdataExportHandler: !Not [!Equals [ !Ref LamdaRoleCommitmentdataExportHandler, "" ]]
+  IsEcsRoleSupplierRegistrationApi: !Not [!Equals [ !Ref EcsRoleSupplierRegistrationApi, "" ]]
+  IsLamdaRoleSohStep:  !Not [!Equals [ !Ref LamdaRoleSohStep, "" ]]
+  IsLambdaRoleStepSohSch: !Not [!Equals [ !Ref LambdaRoleStepSohSch, "" ]]
+  IsLamdaRoleOpvsoaInitiatorV2: !Not [!Equals [ !Ref LamdaRoleOpvsoaInitiatorV2, "" ]]
+  IsLamdaRoleOpvsoaBuilderV2: !Not [!Equals [ !Ref LamdaRoleOpvsoaBuilderV2, "" ]]
+  IsLambdaRoleDocdbSecRot: !Not [!Equals [ !Ref LambdaRoleDocdbSecRot, "" ]]  
+  IsLambdaRoleIdentityManagementSync: !Not [!Equals [ !Ref LambdaRoleIdentityManagementSync, "" ]]
+  IsLambdaRoleSfrsSupplierNotification: !Not [!Equals [ !Ref LambdaRoleSfrsSupplierNotification, "" ]]
+  IsLambdaRoleSfrsFactoryNotification: !Not [!Equals [ !Ref LambdaRoleSfrsFactoryNotification, "" ]]
+  IsLambdaRoleDssSfrsEventPublish: !Not [!Equals [ !Ref LambdaRoleDssSfrsEventPublish, "" ]]
+  IsEcsRoleFacadeApi: !Not [!Equals [ !Ref EcsRoleFacadeApi, "" ]]
+  IsEcsRoleProductComponentApi: !Not [!Equals [ !Ref EcsRoleProductComponentApi, "" ]]
+  IsEcsRoleMdmApi: !Not [!Equals [ !Ref EcsRoleMdmApi, "" ]]
+  IsEcsRoleGmCommitmentDataApi: !Not [!Equals [ !Ref EcsRoleGmCommitmentDataApi, "" ]]
+  IsEcsRoleOrderProjectionApi: !Not [!Equals [ !Ref EcsRoleOrderProjectionApi, "" ]]
+  IsEcsRoleIdentityMgmtApi: !Not [!Equals [ !Ref EcsRoleIdentityMgmtApi, "" ]]
+  IsEcsAppsOnboardingApi: !Not [!Equals [ !Ref EcsAppsOnboardingApi, "" ]]
+  IsEcsRoleAuthApi: !Not [!Equals [ !Ref EcsRoleAuthApi, "" ]]
+  IsEcsRoleCommon:  !Not [!Equals [ !Ref EcsRoleCommon, "" ]]
+  IsEcsRoleOrdersPoller: !Not [!Equals [!Ref  EcsRoleOrdersPoller, ""]]
+  
+Resources:
+  KMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-kms-${Environment}"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag
+      Description: kms key for vendorportal general purposes
+      EnableKeyRotation: True
+      Enabled: True
+      KeyPolicy:
+        Version: 2012-10-17
+        Statement:
+          - Sid: 'Allow Read/Describe'
+            Effect: 'Allow'
+            Principal:
+              AWS:
+                - !ImportValue ConfigRecorderRole
+                - !Sub "arn:${AWS::Partition}:iam::${AccountId}:role/ADFS-${Environment}-${ProjectTag}-global-admin"
+            Action:
+              - "kms:DescribeKey"
+              - "kms:GetKeyRotationStatus"
+              - "kms:GetKeyPolicy"
+            Resource: "*"
+          - Effect: Allow
+            Resource: "*"
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:GenerateDataKey*
+              - kms:Describe*
+              - kms:Put*
+              - kms:Create*
+              - kms:Update*
+              - kms:Enable*
+              - kms:Revoke*
+              - kms:List*
+              - kms:Disable*
+              - kms:Get*
+              - kms:Delete*
+              - kms:ScheduleKeyDeletion
+              - kms:CancelKeyDeletion
+            Principal:
+              AWS: 
+              - !Sub arn:${AWS::Partition}:iam::${AccountId}:role/infra-cfnrole-${ProjectTag}-nonprivileged
+              - !If 
+                - IsDev
+                - !Sub arn:${AWS::Partition}:iam::${AccountId}:role/ADFS-${Environment}-${ProjectTag}-global-admin
+                - !Ref AWS::NoValue
+          - Sid: 'Allow workloads to decrypt using cmk'
+            Effect: Allow
+            Resource: "*"
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey*
+            Principal:
+              AWS:                
+                - Fn::ImportValue: !Sub ${IamStack}::VendorPortalECSInstanceRoleArn
+                - !If 
+                  - IsLambdaRoleStepSoh
+                  - !Ref LambdaRoleStepSoh 
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsLambdaRoleStepSohSsmChange
+                  - !Ref LambdaRoleStepSohSsmChange 
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsLamdaRoleECSNotify
+                  - !Ref LamdaRoleECSNotify
+                  - !Ref "AWS::NoValue"
+                - !If 
+                  - IsLamdaRoleOpvsoaInitiatorV2
+                  - !Ref LamdaRoleOpvsoaInitiatorV2
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsLamdaRoleOpvsoaBuilderV2
+                  - !Ref LamdaRoleOpvsoaBuilderV2
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsEcsRoleCommitmentDataApi
+                  - !Ref EcsRoleCommitmentDataApi
+                  - !Ref "AWS::NoValue"
+                - !If
+                  - IsLamdaRoleCommitmentdataExportHandler
+                  - !Ref LamdaRoleCommitmentdataExportHandler
+                  - !Ref "AWS::NoValue"                                                              
+          - Sid: 'Allow jenkins user to only encrypt using cmk'
+            Effect: Allow
+            Resource: "*"
+            Action:
+              - kms:Encrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+            Principal:
+              AWS:
+                - !Sub arn:${AWS::Partition}:iam::${AccountId}:user/infra-prjauth-vendorportal             
+          - Sid: 'Allow sns service to decrypt using cmk'
+            Effect: Allow
+            Resource: "*"
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey*
+            Principal:
+              Service:
+                - sns.amazonaws.com
+                - elasticache.amazonaws.com
+          - Sid: 'Allow lambda service to decrypt using cmk'
+            Effect: Allow
+            Resource: "*"
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey*
+            Principal:
+              Service:
+                lambda.amazonaws.com
+
+  KMSKeyAlias:                  
+    Type: AWS::KMS::Alias
+    Properties: 
+      AliasName: !Sub alias/${ProjectTag}/general
+      TargetKeyId: !Ref KMSKey       
+  DocdbKMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-kms-${Environment}"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag
+      Description: kms key for vendorportal db
+      EnableKeyRotation: True
+      Enabled: True
+      KeyPolicy:
+        Version: 2012-10-17
+        Statement:
+          - Sid: 'Allow Read/Describe'
+            Effect: 'Allow'
+            Principal:
+              AWS:
+                - !ImportValue ConfigRecorderRole
+                - !Sub arn:${AWS::Partition}:iam::${AccountId}:role/ADFS-${Environment}-${ProjectTag}-global-admin
+            Action:
+              - "kms:DescribeKey"
+              - "kms:GetKeyRotationStatus"
+              - "kms:GetKeyPolicy"
+            Resource: "*"
+          - Sid: Allow management use
+            Effect: Allow
+            Resource: "*"
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey*
+              - kms:Describe*
+              - kms:Put*
+              - kms:Create*
+              - kms:Update*
+              - kms:Enable*
+              - kms:Revoke*
+              - kms:List*
+              - kms:Disable*
+              - kms:Get*
+              - kms:Delete*
+              - kms:ScheduleKeyDeletion
+              - kms:CancelKeyDeletion
+            Principal:
+              AWS:               
+              - !Sub arn:${AWS::Partition}:iam::${AccountId}:role/infra-cfnrole-${ProjectTag}-nonprivileged
+          - Sid: Allow view
+            Effect: Allow
+            Resource: "*"
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey*
+              - kms:Describe*
+              - kms:Put*
+              - kms:Create*
+              - kms:Update*
+              - kms:Enable*              
+              - kms:List*
+              - kms:Disable*
+              - kms:Get*              
+              - kms:CancelKeyDeletion
+            Principal:
+              AWS: 
+              - !Sub arn:${AWS::Partition}:iam::${AccountId}:role/infra-cfnrole-${ProjectTag}-nonprivileged
+              - !If 
+                - IsDev
+                - !Sub arn:${AWS::Partition}:iam::${AccountId}:role/ADFS-${Environment}-${ProjectTag}-global-admin
+                - !Ref AWS::NoValue              
+          - Sid: 'Allow containers to decrypt using cmk'
+            Effect: Allow
+            Resource: "*"
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey*
+            Principal:
+              AWS:                
+                - Fn::ImportValue: !Sub ${IamStack}::VendorPortalECSInstanceRoleArn
+                #- Fn::ImportValue: !Sub ${EcsStack}::VendorPortalECSInstanceRole  #role moved to iam stack to solve dependency issue
+  DocdbKMSKeyAlias:    
+    Type: AWS::KMS::Alias
+    Properties: 
+      AliasName: alias/vendorportal/docdb
+      TargetKeyId: !Ref DocdbKMSKey  
+  RelayKMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-relay-kms-${Environment}"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag
+      Description: kms key for vendorportal relaying purposes
+      EnableKeyRotation: True
+      Enabled: True
+      KeyPolicy:
+        Version: 2012-10-17
+        Statement:
+          - Sid: 'Allow Read/Describe'
+            Effect: 'Allow'
+            Principal:
+              AWS:
+                - !ImportValue ConfigRecorderRole
+                - !Sub arn:${AWS::Partition}:iam::${AccountId}:role/ADFS-${Environment}-${ProjectTag}-global-admin
+            Action:
+              - "kms:DescribeKey"
+              - "kms:GetKeyRotationStatus"
+              - "kms:GetKeyPolicy"
+            Resource: "*"
+          - Sid: 'Allow Admin Access'
+            Effect: Allow
+            Resource: "*"
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey*
+              - kms:Describe*
+              - kms:Put*
+              - kms:Create*
+              - kms:Update*
+              - kms:Enable*
+              - kms:Revoke*
+              - kms:List*
+              - kms:Disable*
+              - kms:Get*
+              - kms:Delete*
+              - kms:ScheduleKeyDeletion
+              - kms:CancelKeyDeletion
+            Principal:
+              AWS:               
+              - !Sub arn:${AWS::Partition}:iam::${AccountId}:role/infra-cfnrole-${ProjectTag}-nonprivileged
+              - !If 
+                - IsDev
+                - !Sub arn:${AWS::Partition}:iam::${AccountId}:role/ADFS-${Environment}-${ProjectTag}-global-admin
+                - !Ref AWS::NoValue   
+              
+          - Sid: 'Allow programs to decrypt'
+            Effect: Allow
+            Resource: "*"
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey*
+            Principal:
+              AWS:
+                - !Ref DssUser
+                - !Ref DssUser1          
+                - Fn::ImportValue: !Sub ${IamStack}::VendorPortalECSInstanceRoleArn
+                - !Sub arn:${AWS::Partition}:iam::${AccountId}:role/ADFS-${Environment}-${ProjectTag}-global-admin
+                - !If 
+                  - IsTestLambdaStack
+                  - Fn::ImportValue: !Sub ${TestLambdaStack}::VendorPortalLambdaRoleArn
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsLambdaRoleStockOnHandIngestion
+                  - !Ref LambdaRoleStockOnHandIngestion
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsEcsRoleStockInHandApi                 
+                  - !Ref EcsRoleStockInHandApi                  
+                  - !Ref "AWS::NoValue"                  
+                - !If 
+                  - IsEcsRoleReportingApi
+                  - !Ref EcsRoleReportingApi
+                  - !Ref AWS::NoValue
+                  
+                - !If 
+                  - IsEcsRoleFacadeApi
+                  - !Ref EcsRoleFacadeApi
+                  - !Ref AWS::NoValue                  
+                - !If 
+                  - IsEcsRoleProductApi
+                  - !Ref EcsRoleProductApi
+                  - !Ref AWS::NoValue
+                - !If 
+                    - IsEcsRoleSupplierApi
+                    - !Ref EcsRoleSupplierApi                  
+                    - !Ref "AWS::NoValue"
+                - !If 
+                  - IsEcsRoleFactoryApi
+                  - !Ref EcsRoleFactoryApi
+                  - !Ref "AWS::NoValue"
+                - !If 
+                  - IsLamdaRoleSohDataPublish
+                  - !Ref LamdaRoleSohDataPublish 
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsLamdaRoleOpvsoaInitiator
+                  - !Ref LamdaRoleOpvsoaInitiator 
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsLamdaRoleOpvsoaBuilder
+                  - !Ref LamdaRoleOpvsoaBuilder 
+                  - !Ref AWS::NoValue 
+                - !If 
+                  - IsLamdaRoleSupplierInvitation
+                  - !Ref LamdaRoleSupplierInvitation 
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsLambdaRoleCommitmentDataHandler
+                  - !Ref LambdaRoleCommitmentDataHandler 
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsEcsRoleCommitmentDataApi
+                  - !Ref EcsRoleCommitmentDataApi
+                  - !Ref "AWS::NoValue"
+                - !If 
+                  - IsLamdaRoleSupplierEventPublisher
+                  - !Ref LamdaRoleSupplierEventPublisher
+                  - !Ref "AWS::NoValue"
+                - !If 
+                  - IsLamdaRoleFactoryEventPublisher
+                  - !Ref LamdaRoleFactoryEventPublisher
+                  - !Ref "AWS::NoValue"
+                - !If 
+                  - IsLamdaRoleSohHistoricalDataPush
+                  - !Ref LamdaRoleSohHistoricalDataPush
+                  - !Ref "AWS::NoValue"
+                - !If
+                  - IsLamdaRoleCommitmentdataExportHandler
+                  - !Ref LamdaRoleCommitmentdataExportHandler
+                  - !Ref "AWS::NoValue"
+                - !If 
+                  - IsEcsRoleSupplierRegistrationApi
+                  - !Ref EcsRoleSupplierRegistrationApi
+                  - !Ref "AWS::NoValue"
+                - !If
+                  - IsLamdaRoleSohStep
+                  - !Ref LamdaRoleSohStep
+                  - !Ref "AWS::NoValue"
+                - !If
+                  - IsLambdaRoleStepSohSch
+                  - !Ref LambdaRoleStepSohSch
+                  - !Ref "AWS::NoValue"
+                - !If 
+                  - IsLamdaRoleOpvsoaInitiatorV2
+                  - !Ref LamdaRoleOpvsoaInitiatorV2
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsLamdaRoleOpvsoaBuilderV2
+                  - !Ref LamdaRoleOpvsoaBuilderV2
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsLambdaRoleIdentityManagementSync
+                  - !Ref LambdaRoleIdentityManagementSync 
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsLambdaRoleSfrsSupplierNotification
+                  - !Ref LambdaRoleSfrsSupplierNotification
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsLambdaRoleSfrsFactoryNotification
+                  - !Ref LambdaRoleSfrsFactoryNotification
+                  - !Ref AWS::NoValue
+                - !If
+                  - IsLambdaRoleDssSfrsEventPublish
+                  - !Ref LambdaRoleDssSfrsEventPublish
+                  - !Ref AWS::NoValue
+                - !If
+                  - IsLambdaRoleSupplierMapping
+                  - !Ref LambdaRoleSupplierMapping
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsEcsRoleProductComponentApi
+                  - !Ref EcsRoleProductComponentApi
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsLambdaRolePclEventPublisher
+                  - !Ref LambdaRolePclEventPublisher
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsEcsRoleOrdersPoller
+                  - !Ref EcsRoleOrdersPoller
+                  - !Ref AWS::NoValue
+                
+          - Sid: 'Allow programs to encrypt'
+            Effect: Allow
+            Resource: "*"
+            Action:
+              - kms:Encrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+            Principal:
+              AWS:
+                - !Sub arn:${AWS::Partition}:iam::${AccountId}:user/infra-prjauth-vendorportal   
+                - !Sub arn:${AWS::Partition}:iam::${AccountId}:role/ADFS-${Environment}-${ProjectTag}-global-admin
+                - !If 
+                  - IsEcsRoleStockInHandApi                 
+                  - !Ref EcsRoleStockInHandApi                  
+                  - !Ref "AWS::NoValue"                      
+          - Sid: 'Allow service to decrypt using cmk'
+            Effect: Allow
+            Resource: "*"
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey*
+            Principal:
+              Service:
+                - sns.amazonaws.com
+                - lambda.amazonaws.com
+  RelayKMSKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties: 
+      AliasName: !Sub alias/${ProjectTag}/relay
+      TargetKeyId: !Ref RelayKMSKey
+
+
+  SecertKMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-secret-kms-${Environment}"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag
+      Description: kms key for vendorportal secert encryption
+      EnableKeyRotation: True
+      Enabled: True
+      KeyPolicy:
+        Version: 2012-10-17
+        Statement:
+          - Sid: 'Allow Read/Describe'
+            Effect: 'Allow'
+            Principal:
+              AWS:
+                - !ImportValue ConfigRecorderRole
+                - !Sub arn:${AWS::Partition}:iam::${AccountId}:role/ADFS-${Environment}-${ProjectTag}-global-admin
+            Action:
+              - "kms:DescribeKey"
+              - "kms:GetKeyRotationStatus"
+              - "kms:GetKeyPolicy"
+            Resource: "*"
+          - Sid: 'Allow Admin Access'
+            Effect: Allow
+            Resource: "*"
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey*
+              - kms:Describe*
+              - kms:Put*
+              - kms:Create*
+              - kms:Update*
+              - kms:Enable*
+              - kms:Revoke*
+              - kms:List*
+              - kms:Disable*
+              - kms:Get*
+              - kms:Delete*
+              - kms:ScheduleKeyDeletion
+              - kms:CancelKeyDeletion
+            Principal:
+              AWS:               
+              - !Sub arn:${AWS::Partition}:iam::${AccountId}:role/infra-cfnrole-${ProjectTag}-nonprivileged
+              - !If 
+                - IsDev
+                - !Sub arn:${AWS::Partition}:iam::${AccountId}:role/ADFS-${Environment}-${ProjectTag}-global-admin
+                - !Ref AWS::NoValue   
+              
+          - Sid: 'Allow programs to decrypt'
+            Effect: Allow
+            Resource: "*"
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey*
+            Principal:
+              AWS:                
+                - Fn::ImportValue: !Sub ${IamStack}::VendorPortalECSInstanceRoleArn
+                - !Sub arn:${AWS::Partition}:iam::${AccountId}:role/infra-cfnrole-${ProjectTag}-nonprivileged
+                - !Sub arn:${AWS::Partition}:iam::${AccountId}:role/ADFS-${Environment}-${ProjectTag}-global-admin
+                - !If 
+                  - IsTestLambdaStack
+                  - Fn::ImportValue: !Sub ${TestLambdaStack}::VendorPortalLambdaRoleArn
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsLambdaRoleStockOnHandIngestion
+                  - !Ref LambdaRoleStockOnHandIngestion
+                  - !Ref AWS::NoValue
+                  
+                - !If
+                  - IsEcsRoleCommon
+                  - !Ref EcsRoleCommon
+                  - !Ref "AWS::NoValue"                  
+                - !If
+                  - IsEcsRoleAuthApi
+                  - !Ref EcsRoleAuthApi
+                  - !Ref "AWS::NoValue"
+                - !If 
+                  - IsEcsRoleIdentityMgmtApi
+                  - !Ref EcsRoleIdentityMgmtApi                  
+                  - !Ref "AWS::NoValue"                  
+                - !If 
+                  - IsEcsAppsOnboardingApi                 
+                  - !Ref EcsAppsOnboardingApi                  
+                  - !Ref "AWS::NoValue"                                      
+                - !If 
+                  - IsEcsRoleStockInHandApi                 
+                  - !Ref EcsRoleStockInHandApi                  
+                  - !Ref "AWS::NoValue"  
+                - !If 
+                  - IsEcsRoleReportingApi
+                  - !Ref EcsRoleReportingApi
+                  - !Ref AWS::NoValue
+                - !If
+                  - IsEcsRoleOrderProjectionApi
+                  - !Ref EcsRoleOrderProjectionApi
+                  - !Ref AWS::NoValue
+                - !If
+                  - IsEcsRoleMdmApi
+                  - !Ref EcsRoleMdmApi
+                  - !Ref AWS::NoValue
+
+                - !If 
+                  - IsEcsRoleProductComponentApi
+                  - !Ref EcsRoleProductComponentApi
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsEcsRoleFacadeApi
+                  - !Ref EcsRoleFacadeApi
+                  - !Ref AWS::NoValue                   
+                - !If 
+                  - IsEcsRoleProductApi
+                  - !Ref EcsRoleProductApi
+                  - !Ref AWS::NoValue
+                - !If 
+                    - IsEcsRoleSupplierApi
+                    - !Ref EcsRoleSupplierApi                  
+                    - !Ref "AWS::NoValue"
+                - !If 
+                  - IsEcsRoleFactoryApi
+                  - !Ref EcsRoleFactoryApi
+                  - !Ref "AWS::NoValue"
+                - !If 
+                  - IsLamdaRoleSohDataPublish
+                  - !Ref LamdaRoleSohDataPublish 
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsLamdaRoleOpvsoaInitiator
+                  - !Ref LamdaRoleOpvsoaInitiator 
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsLamdaRoleOpvsoaBuilder
+                  - !Ref LamdaRoleOpvsoaBuilder 
+                  - !Ref AWS::NoValue 
+                - !If 
+                  - IsLamdaRoleSupplierInvitation
+                  - !Ref LamdaRoleSupplierInvitation 
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsLambdaRoleCommitmentDataHandler
+                  - !Ref LambdaRoleCommitmentDataHandler 
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsEcsRoleCommitmentDataApi
+                  - !Ref EcsRoleCommitmentDataApi
+                  - !Ref "AWS::NoValue"
+                - !If 
+                  - IsEcsRoleGmCommitmentDataApi
+                  - !Ref EcsRoleGmCommitmentDataApi
+                  - !Ref "AWS::NoValue"                  
+                - !If 
+                  - IsLamdaRoleSupplierEventPublisher
+                  - !Ref LamdaRoleSupplierEventPublisher
+                  - !Ref "AWS::NoValue"
+                - !If 
+                  - IsLamdaRoleFactoryEventPublisher
+                  - !Ref LamdaRoleFactoryEventPublisher
+                  - !Ref "AWS::NoValue"
+                - !If 
+                  - IsLamdaRoleSohHistoricalDataPush
+                  - !Ref LamdaRoleSohHistoricalDataPush
+                  - !Ref "AWS::NoValue"
+                - !If
+                  - IsLamdaRoleCommitmentdataExportHandler
+                  - !Ref LamdaRoleCommitmentdataExportHandler
+                  - !Ref "AWS::NoValue"
+                - !If 
+                  - IsEcsRoleSupplierRegistrationApi
+                  - !Ref EcsRoleSupplierRegistrationApi
+                  - !Ref "AWS::NoValue"
+                - !If
+                  - IsLamdaRoleSohStep
+                  - !Ref LamdaRoleSohStep
+                  - !Ref "AWS::NoValue"
+                - !If
+                  - IsLambdaRoleStepSohSch
+                  - !Ref LambdaRoleStepSohSch
+                  - !Ref "AWS::NoValue"
+                - !If 
+                  - IsLamdaRoleOpvsoaInitiatorV2
+                  - !Ref LamdaRoleOpvsoaInitiatorV2
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsLamdaRoleOpvsoaBuilderV2
+                  - !Ref LamdaRoleOpvsoaBuilderV2
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsLambdaRoleDocdbSecRot
+                  - !Ref LambdaRoleDocdbSecRot
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsLambdaRoleStepSoh
+                  - !Ref LambdaRoleStepSoh 
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsLambdaRoleIdentityManagementSync
+                  - !Ref LambdaRoleIdentityManagementSync 
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsLamdaRoleOpvsoaInitiatorV2
+                  - !Ref LamdaRoleOpvsoaInitiatorV2
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsLamdaRoleOpvsoaBuilderV2
+                  - !Ref LamdaRoleOpvsoaBuilderV2
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsLambdaRoleSfrsSupplierNotification
+                  - !Ref LambdaRoleSfrsSupplierNotification
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsLambdaRoleSfrsFactoryNotification
+                  - !Ref LambdaRoleSfrsFactoryNotification
+                  - !Ref AWS::NoValue
+                - !If
+                  - IsLambdaRoleDssSfrsEventPublish
+                  - !Ref LambdaRoleDssSfrsEventPublish
+                  - !Ref AWS::NoValue
+                - !If
+                  - IsLambdaRoleSupplierMapping
+                  - !Ref LambdaRoleSupplierMapping
+                  - !Ref AWS::NoValue
+                - !If 
+                  - IsEcsRoleOrdersPoller
+                  - !Ref EcsRoleOrdersPoller
+                  - !Ref AWS::NoValue
+
+          - Sid: 'Allow programs to encrypt'
+            Effect: Allow
+            Resource: "*"
+            Action:
+              - kms:Encrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+            Principal:
+              AWS:
+                - !Sub arn:${AWS::Partition}:iam::${AccountId}:user/infra-prjauth-vendorportal   
+                - !Sub arn:${AWS::Partition}:iam::${AccountId}:role/ADFS-${Environment}-${ProjectTag}-global-admin
+                - !Sub arn:${AWS::Partition}:iam::${AccountId}:role/infra-cfnrole-${ProjectTag}-nonprivileged
+                - !If 
+                  - IsLambdaRoleDocdbSecRot
+                  - !Ref LambdaRoleDocdbSecRot
+                  - !Ref AWS::NoValue                  
+                   
+          - Sid: 'Allow service to decrypt using cmk'
+            Effect: Allow
+            Resource: "*"
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey*
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+  SecretKMSKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties: 
+      AliasName: !Sub alias/${ProjectTag}/secret
+      TargetKeyId: !Ref SecertKMSKey  
+Outputs:
+  KMSKey:
+    Description: kms key for general purposes
+    Value: !Ref KMSKey
+    Export:
+      Name: !Sub ${AWS::StackName}::KMSKey
+
+  KMSKeyArn:
+    Description: kms key for general purposes
+    Value: !GetAtt KMSKey.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}::KMSKeyArn
+
+  DocdbKMSKey:
+    Description: kms key for docdb purposes
+    Value: !Ref DocdbKMSKey
+    Export:
+      Name: !Sub ${AWS::StackName}::DocdbKMSKey
+
+  DocdbKMSKeyArn:
+    Description: kms key for docdb purposes
+    Value: !GetAtt DocdbKMSKey.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}::DocdbKMSKeyArn
+
+  RelayKMSKey:
+    Description: kms key for replay purposes
+    Value: !Ref RelayKMSKey
+    Export:
+      Name: !Sub ${AWS::StackName}::RelayKMSKey
+
+  RelayKMSKeyArn:
+    Description: kms key for relay purposes
+    Value: !GetAtt RelayKMSKey.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}::RelayKMSKeyArn
+  SecertKMSKey:
+    Description: kms key for secret purposes
+    Value: !Ref SecertKMSKey
+    Export:
+      Name: !Sub ${AWS::StackName}::SecertKMSKey
+
+  SecertKMSKeyArn:
+    Description: kms key for secret purposes
+    Value: !GetAtt SecertKMSKey.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}::SecertKMSKeyArn                  
+      

@@ -1,0 +1,61 @@
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+    Creates Product DynamoDB table for vendorportal project
+Parameters:
+  BillingTag:
+    Default: "vendorportal"
+    Type: "String"
+  OwnerTag:
+    Default: "vendorportal"
+    Type: "String"
+  ProjectTag:
+    Default: "vendorportal"
+    Type: "String"
+  Environment:
+    Default: "dev"
+    AllowedValues: [dev, prod, nonprod]
+    Type: "String"
+  TableName:
+    Description: TableName
+    Type: String
+    Default: product    
+
+
+Resources: 
+  VendorportalDyDBTable: 
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PROVISIONED
+      PointInTimeRecoverySpecification:
+         PointInTimeRecoveryEnabled: true
+      AttributeDefinitions: 
+        - 
+          AttributeName: "keycodeNumber"
+          AttributeType: "N"
+      KeySchema: 
+        - 
+          AttributeName: "keycodeNumber"
+          KeyType: "HASH"
+      ProvisionedThroughput: 
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      TableName: !Sub "${ProjectTag}-${TableName}-${Environment}"
+      Tags:
+          - Key: Name
+            Value: "products-table"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+
+Outputs:
+  VendorportalDyDBTable:
+    Description: A reference to the Table name
+    Value: !Ref VendorportalDyDBTable
+    Export:
+      Name: !Sub ${AWS::StackName}::Vendorportal-${TableName}-TableName

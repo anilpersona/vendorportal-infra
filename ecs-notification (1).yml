@@ -1,0 +1,234 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Lambda creation template    
+Parameters:
+  CWLogsRetentionPeriod:
+    Type: Number
+    Default: 7
+  SumoLogShipperLambdaArn:
+    Type: String
+    Default: 'test'
+  FromEmail:
+    Type: String
+    Description: email id to send from
+    Default: osbnotification@kasasia.com
+  ToEmail:
+    Type: String
+    Description: email id to send to    
+  Proxy:
+    Type: String
+    Description: system proxy
+    Default: "http://proxy.int.sharedsvc.a-sharedinfra.net:8080"
+  SlackHook:
+    Type: String
+    Description: incomming webhook for slack
+  LambdaPackageName:
+    Type: String
+    Description: Lambda package name
+    Default: test
+  KmsStack:
+    Description: StackName without the component name
+    Type: String   
+  SgStack:
+    Description: StackName without the component name
+    Type: String      
+  S3Stack:
+    Description: StackName without the component name
+    Type: String
+  VpcBaseStack:
+    Type: String
+    AllowedPattern: '[A-Za-z][A-Za-z0-9-]{0,127}'      
+  ECSNotifyLambdaS3Key:
+    Type: String
+    Description: Lambda package s3 key
+  EnableXrayAlbSgUpdateLambda:
+    Type: String
+    Description: Enables xray tracing on lambda
+    AllowedValues: ["true", "false"]
+    Default: "false"
+  EventState:
+    Type: String
+    AllowedValues: [DISABLED, ENABLED] 
+    Description: Sate of Scheduler
+    Default: ENABLED
+  BillingTag:
+    Default: "vendorportal"
+    Type: "String"
+  OwnerTag:
+    Default: "vendorportal"
+    Type: "String"
+  ProjectTag:
+    Default: "vendorportal"
+    Type: "String"
+  Environment:
+    Default: "dev"
+    AllowedValues: [dev, prod, nonprod]
+    Type: "String"
+
+Conditions: 
+  IsProd: !Equals [ !Ref Environment, "prod" ]
+  IsNonProd: !Equals [ !Ref Environment, "nonprod" ]
+  IsDev: !Equals [ !Ref Environment, "dev" ]
+  EnableXrayAlbSgUpdateLambda: !Equals [ "true", !Ref EnableXrayAlbSgUpdateLambda ]
+  IsSumoLogShipperLambdaArn: !Not [!Equals [ !Ref SumoLogShipperLambdaArn, "" ]]
+
+Resources:
+  VendorPortalEcsNotifyLogGroup:
+    Type: "AWS::Logs::LogGroup"
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${VendorPortalEcsNotifyLambda}"
+      RetentionInDays: !Ref CWLogsRetentionPeriod
+  VendorPortalEcsNotifySumoCWLogSubsriptionFilter:
+    Type: AWS::Logs::SubscriptionFilter
+    Condition: IsSumoLogShipperLambdaArn
+    Properties:
+      LogGroupName: !Ref VendorPortalEcsNotifyLogGroup        
+      DestinationArn: !Ref SumoLogShipperLambdaArn           
+      FilterPattern: ''
+  VendorPortalECSTaskNotification:
+    Type: 'AWS::Events::Rule'
+    Properties:
+      Description: 'trigger rule when task is killed'
+      EventPattern: 
+        source:
+          - aws.ecs
+        detail-type:
+          - "ECS Task State Change"
+        detail:
+          clusterArn:
+            - !Sub "arn:aws:ecs:ap-southeast-2:${AWS::AccountId}:cluster/vendorportal-cluster-${Environment}"
+          lastStatus:
+            - STOPPED
+          stoppedReason:
+            - Essential container in task exited
+      State: !Ref EventState
+      Targets:        
+        - Arn: 
+            !Sub arn:aws:sns:ap-southeast-2:${AWS::AccountId}:vendorportal-ecs-notification-${Environment}
+          Id: ECSTopic
+  VendorPortalEcsNotifyLambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-iam-role-ecs-notify"
+        - Key: Billing
+          Value: !Sub "${BillingTag}"
+        - Key: Environment
+          Value: !Sub "${Environment}"        
+        - Key: Owner
+          Value: !Sub "${OwnerTag}"
+        - Key: Project
+          Value: !Sub "${ProjectTag}"
+      Path: "/"
+      Policies:
+        - PolicyName: "log-usage-policy"
+          PolicyDocument:
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream                  
+                  - logs:PutLogEvents
+                Resource: "arn:aws:logs:*:*:*"
+        - PolicyName: "vpcAccessExecution"
+          PolicyDocument:
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - ec2:CreateNetworkInterface
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DeleteNetworkInterface
+                  - ec2:AssignPrivateIpAddresses
+                  - ec2:UnassignPrivateIpAddresses
+                Resource: "*"
+        - !If 
+          - EnableXrayAlbSgUpdateLambda
+          - PolicyName: "xray-permissions"
+            PolicyDocument:
+              Statement:
+                - Effect: "Allow"
+                  Action:                  
+                    - xray:PutTraceSegments
+                    - xray:PutTelemetryRecords
+                  Resource: "*"
+          - !Ref AWS::NoValue                
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [lambda.amazonaws.com]
+            Action: ['sts:AssumeRole']
+  VendorPortalEcsNotifyLambdaRoleARNSSM:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${ProjectTag}/lambda/iam-role-arn/ecs-notify"
+      Type: String
+      Value: !GetAtt VendorPortalEcsNotifyLambdaRole.Arn
+      Description: !Sub "SSM Parameter stores ecs-notify lambda role arn"
+      Tags:
+        Name: !Sub "${AWS::StackName}-ssm-param-lambda-role-arn"
+        Billinge: !Sub "${BillingTag}"
+        Environment: !Sub "${Environment}"        
+        Owner: !Sub "${OwnerTag}"
+        Project: !Sub "${ProjectTag}"             
+  VendorPortalLambdaInvokePermissionSns:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref VendorPortalEcsNotifyLambda
+      Principal: sns.amazonaws.com      
+      SourceArn: !Sub "arn:aws:sns:${AWS::Region}:${AWS::AccountId}:vendorportal-ecs-notification-${Environment}"
+  VendorPortalLambdaInvokeSnsSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Endpoint: !GetAtt VendorPortalEcsNotifyLambda.Arn
+      Protocol: lambda
+      TopicArn: !Sub "arn:aws:sns:${AWS::Region}:${AWS::AccountId}:vendorportal-ecs-notification-${Environment}"
+  VendorPortalEcsNotifyLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub vendorportal-ecs-notify-${Environment}
+      Role: !GetAtt VendorPortalEcsNotifyLambdaRole.Arn   
+      Handler: lambda_function.handler
+      Runtime: python3.7
+      TracingConfig:
+        Mode: 
+          !If 
+            - EnableXrayAlbSgUpdateLambda        
+            - Active
+            - !Ref AWS::NoValue      
+      Timeout: 60
+      Environment:
+        Variables:
+          TO_EMAIL: !Ref ToEmail
+          FROM_EMAIL: !Ref FromEmail
+          REGION: !Ref "AWS::Region"
+          PROXY: !Ref Proxy
+          AWS_ENV: !Ref Environment        
+          SLACK_HOOK: !Ref SlackHook
+          KMS_KEY:
+            Fn::ImportValue: !Sub ${KmsStack}::KMSKey              
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-lambda-${Environment}"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag
+      VpcConfig: 
+        SecurityGroupIds:
+          - Fn::ImportValue: !Sub "${SgStack}::VendorportalLambdaSecurityGroup"
+        SubnetIds:
+          - Fn::ImportValue: !Sub "${VpcBaseStack}::SubnetIdPrivateAz1"
+          - Fn::ImportValue: !Sub "${VpcBaseStack}::SubnetIdPrivateAz2"
+          - Fn::ImportValue: !Sub "${VpcBaseStack}::SubnetIdPrivateAz2"          
+      Code:
+        S3Bucket:
+          Fn::ImportValue: !Sub ${S3Stack}::VendorPortalArtifactBucketName
+        S3Key: !Sub "${ECSNotifyLambdaS3Key}/${LambdaPackageName}.zip"       
+ 

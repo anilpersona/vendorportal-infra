@@ -1,0 +1,170 @@
+---
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Vendorportal Notification setup"
+
+Parameters:
+  KmsStack:
+    Type: String
+  BillingTag:
+    Default: vendorportal
+    Type: String
+  OwnerTag:
+    Default: vendorportal
+    Type: String
+  ProjectTag:
+    Default: vendorportal
+    Type: String
+  Environment:
+    Default: dev
+    AllowedValues: [dev, prod, nonprod]
+    Type: String
+    ConstraintDescription: must specify prod, dev, or nonprod.
+  EndpointEmail:
+    Type: String
+    Default: 'Dipeshkumar.guria@kas-services.com'
+Conditions: 
+  IsHigherEnv: !Or [!Equals [ !Ref Environment, "dev" ], !Equals [ !Ref Environment, "nonprod" ], !Equals [ !Ref Environment, "prod" ]]
+
+Resources:
+  SfrsNotificationTopic:    
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "vendorportal-sfrs-generic-notification-${Environment}"
+      KmsMasterKeyId: 
+        Fn::ImportValue: !Sub ${KmsStack}::KMSKey
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-sfrs-generic-notification"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag
+  PlatformNotificationTopic:    
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "vendorportal-platform-notification-${Environment}"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-topic-platform-notification"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag
+  ECSNotificationTopic:    
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "vendorportal-ecs-notification-${Environment}"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-topic-platform-notification"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag                
+  ECSNotificationTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      PolicyDocument:
+        Id: ECSNotificationTopic
+        Version: '2012-10-17'
+        Statement:
+        - Sid: PushToECSTopic
+          Effect: Allow
+          Principal:
+            Service: "events.amazonaws.com"
+          Action: sns:Publish
+          Resource: !Ref ECSNotificationTopic
+      Topics:
+      - !Ref ECSNotificationTopic
+  EmailAlertSubscription:      
+      Type: AWS::SNS::Subscription
+      Properties:
+        Endpoint: !Ref EndpointEmail
+        Protocol: email
+        TopicArn: !Ref PlatformNotificationTopic
+  VendorPortalOrderProjectionNotificationTopic:    
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${ProjectTag}-order-projection-notification-${Environment}"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-order-projection-notification-${Environment}"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag  
+  VendorPortalSOHReportingLambdaTopic:    
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${ProjectTag}-soh-reporting-lambda-${Environment}"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-soh-reporting-lambda-${Environment}"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag
+  VendorPortalGMCommitmentDataTopic:    
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${ProjectTag}-gm-commitment-data-${Environment}"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-gm-commitment-data-${Environment}"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag          
+                       
+Outputs:
+  SfrsNotificationTopic:      
+      Description: A reference to the Vendorportal SFRS notification SNS
+      Value: !Ref SfrsNotificationTopic
+      Export:
+        Name: !Sub ${AWS::StackName}::SfrsNotificationTopic
+  PlatformNotificationTopic:      
+      Description: A reference to the Vendorportal notification SNS
+      Value: !Ref PlatformNotificationTopic
+      Export:
+        Name: !Sub ${AWS::StackName}::PlatformNotificationTopic
+  VendorPortalOrderProjectionNotificationTopic:      
+      Description: A reference to the OrderProjection Notification SNS
+      Value: !Ref VendorPortalOrderProjectionNotificationTopic
+      Export:
+        Name: !Sub ${AWS::StackName}::OrderProjectionNotificationTopic
+  VendorPortalSOHReportingLambdaTopic:      
+      Description: A reference to the SOH Reporting Lambda Notification SNS
+      Value: !Ref VendorPortalSOHReportingLambdaTopic
+      Export:
+        Name: !Sub ${AWS::StackName}::SOHReportingLambdaTopic
+  VendorPortalGMCommitmentDataTopic:
+      Description: A reference to the GM commitment data Notification SNS
+      Value: !Ref VendorPortalGMCommitmentDataTopic
+      Export:
+        Name: !Sub ${AWS::StackName}::GMCommitmentDataTopic  
+                        

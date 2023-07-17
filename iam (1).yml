@@ -1,0 +1,296 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "IAM Roles for VendorPortal"
+Parameters:
+  BillingTag:
+    Default: "vendorportal"
+    Type: "String"
+  OwnerTag:
+    Default: "vendorportal"
+    Type: "String"
+  ProjectTag:
+    Default: "vendorportal"
+    Type: "String"
+  Environment:
+    Default: "dev"
+    AllowedValues: [dev, prod, nonprod]
+    Type: "String"
+    ConstraintDescription: must specify prod, dev, or nonprod.
+  SnsStack:
+    Type: "String"
+  SqsStack:
+    Type: "String"
+  S3Stack:
+    Type: "String"
+  KmsStack:
+    Type: String
+
+# these IAM can be used by VendorPortal project
+Resources:
+  VendorPortalPutLatestToolLambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-iam-role-put-latest-tool"
+        - Key: Billing
+          Value: !Sub "${BillingTag} "
+        - Key: Environment
+          Value: !Sub "${Environment} "        
+        - Key: Owner
+          Value: !Sub "${OwnerTag} "
+        - Key: Project
+          Value: !Sub "${ProjectTag} "
+      Path: "/"
+      Policies:
+        - PolicyName: "log-usage-policy"
+          PolicyDocument:
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:GetLogEvents
+                  - logs:PutLogEvents
+                Resource: "*"
+        - PolicyName: "ssm-usage"
+          PolicyDocument:
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - ssm:GetParameters
+                  - ssm:PutParameter
+                Resource: "*"
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [lambda.amazonaws.com, edgelambda.amazonaws.com]
+            Action: ['sts:AssumeRole']
+  VendorPortalCFCacheInvalidatorLambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-iam-role-cf-cache-invalidator"
+        - Key: Billing
+          Value: !Sub "${BillingTag} "
+        - Key: Environment
+          Value: !Sub "${Environment} "        
+        - Key: Owner
+          Value: !Sub "${OwnerTag} "
+        - Key: Project
+          Value: !Sub "${ProjectTag} "
+      Path: "/"
+      Policies:
+        - PolicyName: "log-usage-policy"
+          PolicyDocument:
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:GetLogEvents
+                  - logs:PutLogEvents
+                Resource: "*"
+        - PolicyName: "cloudfront-usage-policy"
+          PolicyDocument:
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - cloudfront:CreateInvalidation
+                  - cloudfront:ListDistributions
+                Resource: "*"
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [lambda.amazonaws.com, edgelambda.amazonaws.com]
+            Action: ['sts:AssumeRole']
+  VendorPortalCFCacheInvalidatorLambdaRoleARNSSM:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Environment}/${ProjectTag}/iam-role-arn/cf_cache_invalidator"
+      Type: String
+      Value: !GetAtt VendorPortalCFCacheInvalidatorLambdaRole.Arn
+      Description: SSM Parameter stores CF cache invalidator lambda role arn      
+      Tags:
+        Name: !Sub "${AWS::StackName}-ssm-param-cf-cache-invalidator-role-arn"
+        Billinge: !Sub "${BillingTag} "
+        Environment: !Sub "${Environment} "        
+        Owner: !Sub "${OwnerTag} "
+        Project: !Sub "${ProjectTag} "
+  VendorPortalECSServiceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-role-ecs-service"
+        - Key: Billing
+          Value: !Sub "${BillingTag} "
+        - Key: Environment
+          Value: !Sub "${Environment} "        
+        - Key: Owner
+          Value: !Sub "${OwnerTag} "
+        - Key: Project
+          Value: !Sub "${ProjectTag} "
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: ecs-service-role
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'elasticloadbalancing:DeregisterInstancesFromLoadBalancer'
+                  - 'elasticloadbalancing:DeregisterTargets'
+                  - 'elasticloadbalancing:Describe*'
+                  - 'elasticloadbalancing:RegisterInstancesWithLoadBalancer'
+                  - 'elasticloadbalancing:RegisterTargets'
+                  - 'ec2:Describe*'
+                  - 'ec2:AuthorizeSecurityGroupIngress'
+                  - 'kms:DescribeKey'
+                  - 'kms:Decrypt'
+                  - 'kms:Encrypt'
+                Resource: '*'        
+  VendorPortalECSInstanceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-iam-role-ecs"
+        - Key: Billing
+          Value: !Sub "${BillingTag} "
+        - Key: Environment
+          Value: !Sub "${Environment} "        
+        - Key: Owner
+          Value: !Sub "${OwnerTag} "
+        - Key: Project
+          Value: !Sub "${ProjectTag} "
+      Path: /
+      RoleName: !Ref 'AWS::StackName'
+      AssumeRolePolicyDocument: |
+        {
+            "Statement": [{
+                "Action": "sts:AssumeRole",
+                "Effect": "Allow",
+                "Principal": {
+                    "Service": ["ec2.amazonaws.com","ecs-tasks.amazonaws.com"]
+                }
+            }]
+        }
+      ManagedPolicyArns:  # This is to enable SSM agent function.
+        - !ImportValue "infra-iam-ssm-ec2role::SSMManagedPolicy"        
+      Policies:
+        - PolicyName: ecs-service
+          PolicyDocument: |
+            {
+                "Statement": [{
+                    "Effect": "Allow",
+                    "Action": [
+                        "ec2:DescribeTags",
+                        "ecs:CreateCluster",
+                        "ecs:DeregisterContainerInstance",
+                        "ecs:DiscoverPollEndpoint",
+                        "ecs:Poll",
+                        "ecs:RegisterContainerInstance",
+                        "ecs:StartTelemetrySession",
+                        "ecs:UpdateContainerInstancesState",
+                        "ecs:Submit*",
+                        "ecr:GetAuthorizationToken",
+                        "ecr:BatchCheckLayerAvailability",
+                        "ecr:GetDownloadUrlForLayer",
+                        "ecr:BatchGetImage",
+                        "logs:CreateLogStream",
+                        "logs:PutLogEvents",
+                        "s3:PutObject",
+                        "s3:GetObject",
+                        "s3:AbortMultipartUpload",
+                        "s3:ListMultipartUploadParts",
+                        "s3:ListBucket",
+                        "s3:ListBucketMultipartUploads",
+                        "s3:GetBucketLocation",
+                        "kms:DescribeKey",
+                        "kms:Decrypt",
+                        "kms:Encrypt",
+                        "ssm:GetParameters"
+                    ],
+                    "Resource": "*"
+                }]
+            }
+  VendorPortalEmptyRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-iam-role-ecs"
+        - Key: Billing
+          Value: !Sub "${BillingTag} "
+        - Key: Environment
+          Value: !Sub "${Environment} "        
+        - Key: Owner
+          Value: !Sub "${OwnerTag} "
+        - Key: Project
+          Value: !Sub "${ProjectTag} "
+      Path: /
+      AssumeRolePolicyDocument: |
+        {
+            "Statement": [{
+                "Action": "sts:AssumeRole",
+                "Effect": "Allow",
+                "Principal": {
+                    "Service": ["ecs-tasks.amazonaws.com"]
+                }
+            }]
+        }            
+      Policies:
+        - PolicyName: s3-list
+          PolicyDocument: |
+            {
+                "Statement": [{
+                    "Effect": "Allow",
+                    "Action": [                        
+                        "s3:List"
+                    ],
+                    "Resource": "*"
+                }]
+            }               
+Outputs:
+  VendorPortalCFCacheInvalidatorLambdaRoleARNOutput:
+    Description: A reference to the role ARN assumable by vendorportal lambda functions
+    Value: !GetAtt VendorPortalCFCacheInvalidatorLambdaRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}::VendorPortalCFCacheInvalidatorLambdaRoleARN'
+  VendorPortalECSServiceRoleARNOutput:
+    Description: vendorportal ECS services role arn
+    Value: !GetAtt VendorPortalECSServiceRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}::VendorPortalECSServiceRoleARN'
+  VendorPortalECSInstanceRole:
+    Description: IAM role of EC2
+    Value: !GetAtt VendorPortalECSInstanceRole.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalECSInstanceRoleArn
+  VendorPortalECSInstanceRoleName:
+    Description: IAM role of EC2
+    Value: !Ref VendorPortalECSInstanceRole
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalECSInstanceRoleName
+  VendorPortalEmptyRoleARNOutput:
+    Description: vendorportal empty role
+    Value: !GetAtt VendorPortalEmptyRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}::VendorPortalEmptyRoleARN'   
+  VendorPortalPutLatestToolLambdaRoleARNOutput:
+    Description: A reference to the role ARN assumable by vendorportal lambda functions
+    Value: !GetAtt VendorPortalPutLatestToolLambdaRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}::VendorPortalPutLatestToolLambdaRoleARN'      
+

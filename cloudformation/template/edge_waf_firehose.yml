@@ -1,0 +1,114 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Stack for Firehose DeliveryStream with S3 Destination.
+Parameters:
+  LogBucketPrefix:
+    Type: "String"
+    Default: "kmartau-vendorportal-logs"
+  BillingTag:
+    Default: "vendorportal"
+    Type: "String"
+  OwnerTag:
+    Default: "vendorportal"
+    Type: "String"
+  ProjectTag:
+    Default: "vendorportal"
+    Type: "String"
+  Environment:
+    Default: "dev"
+    AllowedValues: [dev, prod, nonprod]
+    Type: "String"
+    ConstraintDescription: must specify prod, dev, or nonprod.
+Resources:
+  VendorPortalDeliveryStream:
+    DependsOn:
+      - VendorportalFirehoseDeliveryPolicy
+    Type: AWS::KinesisFirehose::DeliveryStream
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-kinesisfirehose-deliverystream"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag
+      DeliveryStreamType: 'DirectPut'
+      DeliveryStreamName: !Sub aws-waf-logs-${ProjectTag}
+      S3DestinationConfiguration :
+        BucketARN: !Join 
+          - ''
+          - - 'arn:aws:s3:::'
+            - !Sub "${LogBucketPrefix}-${Environment}"
+        BufferingHints:
+          IntervalInSeconds: 100
+          SizeInMBs: 50
+        CompressionFormat: GZIP
+        Prefix: firehose/
+        RoleARN: !GetAtt VendorportalFirehoseDeliveryRole.Arn
+        # EncryptionConfiguration:
+        #   KMSEncryptionConfig: 
+        #     AWSKMSKeyARN: !Sub 'arn:aws:kms:ap-southeast-2:${AWS::AccountId}:key/9acd438b-d605-4e9b-bbe7-cb57ab581eca'      
+  VendorportalFirehoseDeliveryRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-iam-role-firehose"
+        - Key: Billing
+          Value: !Sub "${BillingTag}"
+        - Key: Environment
+          Value: !Sub "${Environment}"        
+        - Key: Owner
+          Value: !Sub "${OwnerTag}"
+        - Key: Project
+          Value: !Sub "${ProjectTag}"
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: ''
+            Effect: Allow
+            Principal:
+              Service: firehose.amazonaws.com
+            Action: 'sts:AssumeRole'
+            Condition:
+              StringEquals:
+                'sts:ExternalId': !Ref 'AWS::AccountId'
+  VendorportalFirehoseDeliveryPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: firehose_delivery_policy_vendorportal
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - 's3:AbortMultipartUpload'
+              - 's3:GetBucketLocation'
+              - 's3:GetObject'
+              - 's3:ListBucket'
+              - 's3:ListBucketMultipartUploads'
+              - 's3:PutObject'
+            Resource:
+              - !Join 
+                - ''
+                - - 'arn:aws:s3:::'
+                  - !Sub "${LogBucketPrefix}-${Environment}"
+              - !Join 
+                - ''
+                - - 'arn:aws:s3:::'
+                  - !Sub "${LogBucketPrefix}-${Environment}"
+                  - '*'
+      Roles:
+        - !Ref VendorportalFirehoseDeliveryRole
+Outputs:
+  VendorPortalDeliveryStreamName:
+    Value: !Ref VendorPortalDeliveryStream
+    Export:
+      Name: !Sub "${AWS::StackName}::DeliveryStreamName"
+  VendorPortalDeliveryStreamArn:
+    Value: !GetAtt  VendorPortalDeliveryStream.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}::DeliveryStreamArn"

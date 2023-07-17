@@ -1,0 +1,170 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "VendorPortal edge lambda functions"
+
+Parameters:
+  LambdaPackageName:
+    Type: String
+    Description: Lambda package name
+    Default: test
+  OriginRequestLambdaS3Key:
+    Type: String
+    Description: Lambda package name    
+  OriginResponseLambdaS3Key:
+    Type: String
+    Description: Lambda package name    
+  BillingTag:
+    Default: "vendorportal"
+    Type: "String"
+  OwnerTag:
+    Default: "vendorportal"
+    Type: "String"
+  ProjectTag:
+    Default: "vendorportal"
+    Type: "String"
+  Environment:
+    Default: "dev"
+    AllowedValues: [dev, prod, nonprod]
+    Type: "String"
+    ConstraintDescription: must specify prod, dev, or nonprod.
+  S3EdgeStack:
+    Type: String
+    Description: Edge s3 stack   
+
+Resources:
+  VendorPortalOriginRequestLambdaFnRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-iam-role-${Environment}"
+        - Key: Billing
+          Value: !Sub "${BillingTag}"
+        - Key: Environment
+          Value: !Sub "${Environment}"        
+        - Key: Owner
+          Value: !Sub "${OwnerTag}"
+        - Key: Project
+          Value: !Sub "${ProjectTag}"
+      Path: "/"
+      Policies:
+        - PolicyName: "log-usage-policy"
+          PolicyDocument:
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:GetLogEvents
+                  - logs:PutLogEvents
+                Resource: "*"
+        - PolicyName: "ec2-usage-policy"
+          PolicyDocument:
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - ec2:CreateNetworkInterface
+                  - ec2:AttachNetworkInterface
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DeleteNetworkInterface
+                Resource: "*"
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [lambda.amazonaws.com, edgelambda.amazonaws.com]
+            Action: ['sts:AssumeRole']
+
+  VendorPortalOriginRequestLambdaVersion:
+    Type: AWS::Lambda::Version
+    Properties: 
+      FunctionName: !Ref VendorPortalOriginRequestLambda      
+
+  VendorPortalOriginResponseLambdaVersion:
+    Type: AWS::Lambda::Version
+    Properties: 
+      FunctionName: !Ref VendorPortalOriginResponseLambda
+
+  VendorPortalOriginRequestLambda:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      FunctionName: "vendorportal-edge-origin-request-lambda"
+      Role: !GetAtt VendorPortalOriginRequestLambdaFnRole.Arn
+      Handler: lambda_function.handler
+      Runtime: "nodejs12.x"
+      Timeout: 5
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-lambda-fn-origin-request"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag
+      Code:
+        S3Bucket:
+          Fn::ImportValue: !Sub ${S3EdgeStack}::VendorPortalEdgeArtifactBucketName
+        S3Key: !Sub "${OriginRequestLambdaS3Key}/${LambdaPackageName}.zip"      
+  VendorPortalOriginRequestLambdaARNSSM:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Environment}/${ProjectTag}/edgelambda/origin-request"
+      Type: String
+      Value: !GetAtt VendorPortalOriginRequestLambda.Arn
+      Description: SSM Parameter stores edge origin-request lambda arn      
+      Tags:
+        Name: !Sub "${AWS::StackName}-ssm-param-edgelambda-arn-origin-request"
+        Billinge: !Ref BillingTag
+        Environment: !Ref Environment
+        Owner: !Ref OwnerTag
+        Project: !Ref ProjectTag
+  VendorPortalOriginResponseLambda:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      FunctionName: "vendorportal-edge-origin-response"
+      Role: !GetAtt VendorPortalOriginRequestLambdaFnRole.Arn
+      Handler: lambda_function.handler
+      Runtime: "nodejs12.x"
+      Timeout: 30
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-lambda-fn-origin-response"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag
+      Code:
+        S3Bucket:
+          Fn::ImportValue: !Sub ${S3EdgeStack}::VendorPortalEdgeArtifactBucketName
+        S3Key: !Sub '${OriginResponseLambdaS3Key}/${LambdaPackageName}.zip'
+  VendorPortalOriginResponseLambdaARNSSM:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${Environment}/${ProjectTag}/edgelambda/origin-response"
+      Type: String
+      Value: !GetAtt VendorPortalOriginResponseLambda.Arn
+      Description: SSM Parameter stores edge origin-response lambda arn      
+      Tags:
+        Name: !Sub "${AWS::StackName}-ssm-param-edgelambda-arn-origin-response"
+        Billinge: !Ref BillingTag
+        Environment: !Ref Environment
+        Owner: !Ref OwnerTag
+        Project: !Ref ProjectTag
+
+
+Outputs:
+  VendorPortalOriginRequestLambdaArn:
+      Value: !Ref   VendorPortalOriginRequestLambdaVersion
+      Export:
+        Name: !Sub ${AWS::StackName}::VendorPortalOriginRequestLambdaArn
+  VendorPortalOriginResponseLambdaArn:
+      Value: !Ref   VendorPortalOriginResponseLambdaVersion
+      Export:
+        Name: !Sub ${AWS::StackName}::VendorPortalOriginResponseLambdaArn

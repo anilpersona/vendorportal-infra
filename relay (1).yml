@@ -1,0 +1,1808 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Template to deploy sqs and sns for eventing"
+
+Parameters:
+  DssUser:
+    Type: String
+    Default: ""
+  DssUser1:
+    Type: String
+    Default: ""
+  BillingTag:
+    Default: "vendorportal"
+    Type: "String"
+  OwnerTag:
+    Default: "vendorportal"
+    Type: "String"
+  ProjectTag:
+    Default: "vendorportal"
+    Type: "String"
+  Environment:
+    Default: "dev"
+    AllowedValues: [dev, prod, nonprod]
+    Type: "String"
+    ConstraintDescription: must specify prod, dev, or nonprod.
+  SnsStack:
+    Type: "String"
+  KmsStack:
+    Type: String
+ 
+Resources:
+
+  VendorPortalDSSFactorySfrsEventTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics: 
+        - !Ref VendorPortalDSSFactorySfrsEventTopic
+      PolicyDocument:
+       Statement:
+          - Sid: CbxProductIntegrationSnsPolicy
+            Effect: Allow
+            Principal:
+              AWS:
+                - !Ref DssUser
+                - !Ref DssUser1
+            Action: 'sns:Publish'
+            Resource: "*"
+  VendorPortalDSSFactorySfrsEventTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      KmsMasterKeyId: !Sub alias/${ProjectTag}/relay
+      Subscription:
+        - Endpoint: !GetAtt VendorPortalDSSFactorySfrsEventQueue.Arn
+          Protocol: sqs  
+      TopicName: !Sub "${ProjectTag}-dss-factory-sfrs-event-topic-${Environment}"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-dss-factory-sfrs-event-${Environment}"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag           
+  VendorPortalDSSFactorySfrsEventQueue: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId: !Sub alias/${ProjectTag}/relay        
+      QueueName: !Sub "vendorportal-dss-factory-sfrs-event-sqs-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 10
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt VendorPortalDSSFactorySfrsEventDLQ.Arn
+        maxReceiveCount: 5
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-dss-factory-sfrs-event-queue"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalDSSFactorySfrsEventQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalDSSFactorySfrsEventQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalDSSFactorySfrsEventQueue.Arn
+        - Sid: AllowSnsSend
+          Effect: Allow
+          Principal:
+            Service:
+              - 'sns.amazonaws.com'
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalDSSFactorySfrsEventQueue.Arn                      
+  VendorPortalDSSFactorySfrsEventDLQ: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId: !Sub alias/${ProjectTag}/relay        
+      QueueName: !Sub "vendorportal-dss-factory-sfrs-event-dlq-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 10     
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-dss-factory-sfrs-event-dlq"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalDSSFactorySfrsEventDLQPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalDSSFactorySfrsEventDLQ        
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalDSSFactorySfrsEventDLQ.Arn
+
+
+  VendorPortalDssSfrsEventPublishTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics: 
+        - !Ref VendorPortalDssSfrsEventPublishTopic
+      PolicyDocument:
+       Statement:
+          - Sid: CbxProductIntegrationSnsPolicy
+            Effect: Allow
+            Principal:
+              AWS:
+                - !Ref DssUser
+                - !Ref DssUser1
+            Action: 'sns:Publish'
+            Resource: "*"
+  VendorPortalDssSfrsEventPublishTopic:    
+    Type: AWS::SNS::Topic
+    Properties:
+      KmsMasterKeyId: !Sub alias/${ProjectTag}/relay
+      Subscription:
+        - Endpoint: !GetAtt VendorPortalDssSfrsEventPublishQueue.Arn
+          Protocol: sqs  
+      TopicName: !Sub "${ProjectTag}-dss-sfrs-event-publish-topic-${Environment}"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-dss-sfrs-event-publish-${Environment}"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag           
+  VendorPortalDssSfrsEventPublishQueue: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId: !Sub alias/${ProjectTag}/relay        
+      QueueName: !Sub "vendorportal-dss-sfrs-event-publish-sqs-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 20
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt VendorPortalDssSfrsEventPublishDLQ.Arn
+        maxReceiveCount: 5
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-dss-sfrs-event-publish-queue"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalDssSfrsEventPublishQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalDssSfrsEventPublishQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalDssSfrsEventPublishQueue.Arn
+        - Sid: AllowSnsSend
+          Effect: Allow
+          Principal:
+            Service:
+              - 'sns.amazonaws.com'
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalDssSfrsEventPublishQueue.Arn                      
+  VendorPortalDssSfrsEventPublishDLQ: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId: !Sub alias/${ProjectTag}/relay        
+      QueueName: !Sub "vendorportal-dss-sfrs-event-publish-dlq-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 20     
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-dss-sfrs-event-publish-dlq"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalDssSfrsEventPublishDLQPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalDssSfrsEventPublishDLQ        
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalDssSfrsEventPublishDLQ.Arn
+
+
+  VendorPortalProductComponentEventTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics: 
+        - !Ref VendorPortalProductComponentEventTopic
+      PolicyDocument:
+       Statement:
+          - Sid: default_policy
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+            Action: 
+              - SNS:GetTopicAttributes
+              - SNS:SetTopicAttributes
+              - SNS:AddPermission
+              - SNS:RemovePermission
+              - SNS:DeleteTopic
+              - SNS:Subscribe
+              - SNS:ListSubscriptionsByTopic
+              - SNS:Publish
+              - SNS:Receive
+            Resource: "*"
+            Condition:
+              StringEquals:
+                AWS:SourceOwner: !Sub ${AWS::AccountId}
+
+  VendorPortalProductComponentEventTopic:    
+    Type: AWS::SNS::Topic
+    Properties:
+      KmsMasterKeyId: !Sub alias/${ProjectTag}/relay
+      Subscription:
+        - Endpoint: !GetAtt VendorPortalProductComponentEventQueue.Arn
+          Protocol: sqs  
+      TopicName: !Sub "${ProjectTag}-product-component-event-topic-${Environment}"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-product-component-event-${Environment}"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag           
+  VendorPortalProductComponentEventQueue: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId: !Sub alias/${ProjectTag}/relay        
+      QueueName: !Sub "vendorportal-product-component-event-sqs-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 20
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt VendorPortalProductComponentEventDLQ.Arn
+        maxReceiveCount: 5
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-product-component-event-queue"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalProductComponentEventQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalProductComponentEventQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalProductComponentEventQueue.Arn
+        - Sid: AllowSnsSend
+          Effect: Allow
+          Principal:
+            Service:
+              - 'sns.amazonaws.com'
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalProductComponentEventQueue.Arn                      
+  VendorPortalProductComponentEventDLQ: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId: !Sub alias/${ProjectTag}/relay        
+      QueueName: !Sub "vendorportal-product-component-event-dlq-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 20     
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-product-component-event-dlq"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalProductComponentEventDLQPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalProductComponentEventDLQ        
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalProductComponentEventDLQ.Arn
+  
+
+
+
+
+  VendorPortalSupplierNotifyQueue: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId:
+        Fn::ImportValue: !Sub "${KmsStack}::RelayKMSKey"
+      QueueName: !Sub "vendorportal-supplier-notify-sqs-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 20
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt VendorPortalSupplierNotifyDLQ.Arn
+        maxReceiveCount: 5
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-supplier-notify-queue"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalSupplierNotifyQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalSupplierNotifyQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalSupplierNotifyQueue.Arn
+        - Sid: AllowSnsSend
+          Effect: Allow
+          Principal:
+            Service:
+              - 'sns.amazonaws.com'
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalSupplierNotifyQueue.Arn                      
+  VendorPortalSupplierNotifyDLQ: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId:
+        Fn::ImportValue: !Sub "${KmsStack}::RelayKMSKey"
+      QueueName: !Sub "vendorportal-supplier-notify-dlq-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 20     
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-supplier-notify-dlq"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalSupplierNotifyDLQPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalSupplierNotifyDLQ        
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalSupplierNotifyDLQ.Arn
+
+  VendorPortalFactoryNotifyQueue:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId:
+        Fn::ImportValue: !Sub "${KmsStack}::RelayKMSKey"
+      QueueName: !Sub "vendorportal-factory-notify-sqs-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 20
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt VendorPortalFactoryNotifyDLQ.Arn
+        maxReceiveCount: 5
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-factory-notify-queue"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalFactoryNotifyQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalFactoryNotifyQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalFactoryNotifyQueue.Arn
+        - Sid: AllowSnsSend
+          Effect: Allow
+          Principal:
+            Service:
+              - 'sns.amazonaws.com'
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalFactoryNotifyQueue.Arn                      
+  VendorPortalFactoryNotifyDLQ: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId:
+        Fn::ImportValue: !Sub "${KmsStack}::RelayKMSKey"
+      QueueName: !Sub "vendorportal-factory-notify-dlq-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 20     
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-factory-notify-dlq"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalFactoryNotifyDLQPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalFactoryNotifyDLQ        
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalFactoryNotifyDLQ.Arn
+    
+  VendorPortalFactoryEventsTopic:    
+    Type: AWS::SNS::Topic
+    Properties:
+      KmsMasterKeyId: !Sub alias/${ProjectTag}/relay
+      Subscription:
+        - Endpoint: !GetAtt VendorPortalFactoryEventsQueue.Arn
+          Protocol: sqs
+        - Endpoint: !GetAtt VendorPortalFactoryNotifyQueue.Arn
+          Protocol: sqs
+      TopicName: !Sub "${ProjectTag}-factory-events-${Environment}"      
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-factory-events-${Environment}"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag 
+  VendorPortalSupplierEventsTopic:    
+    Type: AWS::SNS::Topic
+    Properties:
+      KmsMasterKeyId: !Sub alias/${ProjectTag}/relay
+      Subscription:
+        - Endpoint: !GetAtt VendorPortalSupplierEventsQueue.Arn
+          Protocol: sqs
+        - Endpoint: !GetAtt VendorPortalSupplierNotifyQueue.Arn
+          Protocol: sqs
+        - Endpoint: !GetAtt VendorPortalSupplierMappingQueue.Arn
+          Protocol: sqs          
+        
+      TopicName: !Sub "${ProjectTag}-supplier-events-${Environment}"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-supplier-events-${Environment}"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag 
+         
+  VendorPortalOpvsaoAggregateOrdersQueue: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId:
+        Fn::ImportValue: !Sub "${KmsStack}::RelayKMSKey"
+      QueueName: !Sub "vendorportal-opvsao-aggregatedorders-sqs-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 20
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt VendorPortalOpvsaoAggregateOrdersDLQ.Arn
+        maxReceiveCount: 5
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-opvsao-aggregatedorders-queue"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalOpvsaoAggregateOrdersQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalOpvsaoAggregateOrdersQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalOpvsaoAggregateOrdersQueue.Arn
+        - Sid: AllowSnsSend
+          Effect: Allow
+          Principal:
+            Service:
+              - 'sns.amazonaws.com'
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalOpvsaoAggregateOrdersQueue.Arn                      
+  VendorPortalOpvsaoAggregateOrdersDLQ: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId:
+        Fn::ImportValue: !Sub "${KmsStack}::RelayKMSKey"
+      QueueName: !Sub "vendorportal-opvsao-aggregatedorders-dlq-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 20     
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-opvsao-aggregatedorders-dlq"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalOpvsaoAggregateOrdersDLQPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalOpvsaoAggregateOrdersDLQ        
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalOpvsaoAggregateOrdersDLQ.Arn
+  
+
+
+  VendorPortalCommitmentDataExportQueue:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId:
+        Fn::ImportValue: !Sub "${KmsStack}::RelayKMSKey"
+      QueueName: !Sub "vendorportal-commitment-data-export-sqs-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 20
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt VendorPortalCommitmentDataExportDLQ.Arn
+        maxReceiveCount: 5
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-commitment-data-export-queue"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalCommitmentDataExportQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalCommitmentDataExportQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalCommitmentDataExportQueue.Arn
+        - Sid: AllowSnsSend
+          Effect: Allow
+          Principal:
+            Service:
+              - 'sns.amazonaws.com'
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalCommitmentDataExportQueue.Arn                      
+  VendorPortalCommitmentDataExportDLQ: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId:
+        Fn::ImportValue: !Sub "${KmsStack}::RelayKMSKey"
+      QueueName: !Sub "vendorportal-commitment-data-export-dlq-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 20     
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-commitment-data-export-dlq"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalCommitmentDataExportDLQPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalCommitmentDataExportDLQ        
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalCommitmentDataExportDLQ.Arn
+  
+  VendorPortalSupplierRegistrationPublishQueue: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId:
+        Fn::ImportValue: !Sub "${KmsStack}::RelayKMSKey"
+      QueueName: !Sub "vendorportal-supplier-reg-publish-sqs-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 20
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt VendorPortalSupplierRegistrationPublishDLQ.Arn
+        maxReceiveCount: 5
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-supplier-reg-publish-queue"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalSupplierRegistrationPublishQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalSupplierRegistrationPublishQueue        
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalSupplierRegistrationPublishQueue.Arn
+        - Sid: AllowSnsSend
+          Effect: Allow
+          Principal:
+            Service:
+              - 'sns.amazonaws.com'
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalSupplierRegistrationPublishQueue.Arn                      
+  VendorPortalSupplierRegistrationPublishDLQ: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId:
+        Fn::ImportValue: !Sub "${KmsStack}::RelayKMSKey"
+      QueueName: !Sub "vendorportal-supplier-reg-publish-dlq-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 20     
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-supplier-reg-publish-dlq"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalSupplierRegistrationDLQPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalSupplierRegistrationPublishDLQ        
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalSupplierRegistrationPublishDLQ.Arn
+
+
+  VendorPortalAppCommitmentDataLoadFifoQueue: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      FifoQueue: true
+      ContentBasedDeduplication: true
+      KmsMasterKeyId: !Sub alias/${ProjectTag}/relay        
+      QueueName: !Sub "vendorportal-app-commitment-dataload-sqs-${Environment}.fifo"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 0
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt VendorPortalAppCommitmentDataLoadFifoDLQ.Arn
+        maxReceiveCount: 1000
+      VisibilityTimeout: 2400
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-app-commitment-dataload-queue"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalAppCommitmentDataLoadFifoQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalAppCommitmentDataLoadFifoQueue        
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalAppCommitmentDataLoadFifoQueue.Arn
+        - Sid: AllowSnsSend
+          Effect: Allow
+          Principal:
+            Service:
+              - 'sns.amazonaws.com'
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalAppCommitmentDataLoadFifoQueue.Arn                      
+  VendorPortalAppCommitmentDataLoadFifoDLQ: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      FifoQueue: true
+      ContentBasedDeduplication: true
+      KmsMasterKeyId: !Sub alias/${ProjectTag}/relay        
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 10     
+      VisibilityTimeout: 1200
+      QueueName: !Sub "vendorportal-app-commitment-dataload-dlq-${Environment}.fifo"
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-app-commitment-dataload-dlq"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalAppCommitmentDataLoadFifoDLQPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalAppCommitmentDataLoadFifoDLQ        
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalAppCommitmentDataLoadFifoDLQ.Arn
+
+
+
+  VendorPortalStockInHandIngestionQueue: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId:
+        Fn::ImportValue: !Sub "${KmsStack}::RelayKMSKey"
+      QueueName: !Sub "vendorportal-stock-in-hand-sqs-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 20
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt VendorPortalStockInHandIngestionDLQ.Arn
+        maxReceiveCount: 5
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-stock-in-hand-queue"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalStockInHandIngestionQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalStockInHandIngestionQueue        
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalStockInHandIngestionQueue.Arn
+        - Sid: AllowSnsSend
+          Effect: Allow
+          Principal:
+            Service:
+              - 'sns.amazonaws.com'
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalStockInHandIngestionQueue.Arn                      
+  VendorPortalStockInHandIngestionDLQ: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId:
+        Fn::ImportValue: !Sub "${KmsStack}::RelayKMSKey"
+      QueueName: !Sub "vendorportal-stock-in-hand-dlq-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 20     
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-stock-in-hand-dlq"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalStockInHandIngestionDlqPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalStockInHandIngestionDLQ        
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalStockInHandIngestionDLQ.Arn
+  VendorPortalOrderProjectionNotificationSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Endpoint: !GetAtt VendorPortalReportingOpAndSohQueue.Arn
+      Protocol: sqs
+      TopicArn: 
+        Fn::ImportValue: !Sub "${SnsStack}::OrderProjectionNotificationTopic"
+  VendorPortalSohNotificationSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Endpoint: !GetAtt VendorPortalReportingOpAndSohQueue.Arn
+      Protocol: sqs
+      TopicArn: !Ref VendorPortalSohNotificationTopic
+  VendorPortalPublishSohDataSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Endpoint: !GetAtt VendorPortalPublishSohDataQueue.Arn
+      Protocol: sqs
+      TopicArn: !Ref VendorPortalSohNotificationTopic             
+  VendorPortalSohNotificationTopic:    
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${ProjectTag}-soh-notification-${Environment}"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-soh-notification-${Environment}"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag           
+  VendorPortalReportingOpAndSohQueue: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId:
+        Fn::ImportValue: !Sub "${KmsStack}::RelayKMSKey"
+      QueueName: !Sub "vendorportal-reporting-op-soh-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 20
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt VendorPortalReportingOpSohDLQ.Arn
+        maxReceiveCount: 5
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-reporting-op-soh-queue"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalReportingOpAndSohQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalReportingOpAndSohQueue        
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalReportingOpAndSohQueue.Arn
+        - Sid: AllowSnsSend
+          Effect: Allow
+          Principal:
+            Service:
+              - 'sns.amazonaws.com'
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalReportingOpAndSohQueue.Arn
+  VendorPortalPublishSohDataQueue: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId:
+        Fn::ImportValue: !Sub "${KmsStack}::RelayKMSKey"
+      QueueName: !Sub "vendorportal-publish-soh-data-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 20
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt VendorPortalPublishSohDataDLQ.Arn
+        maxReceiveCount: 5
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-publish-soh-data-queue"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalPublishSohDataQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalPublishSohDataQueue        
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalPublishSohDataQueue.Arn
+        - Sid: AllowSnsSend
+          Effect: Allow
+          Principal:
+            Service:
+              - 'sns.amazonaws.com'
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalPublishSohDataQueue.Arn
+  VendorPortalPublishSohDataDLQ: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId:
+        Fn::ImportValue: !Sub "${KmsStack}::RelayKMSKey"
+      QueueName: !Sub "vendorportal-publish-soh-data-dlq-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 20     
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-publish-soh-data-dlq"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalPublishSohDataDLQPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalPublishSohDataDLQ        
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalPublishSohDataDLQ.Arn
+        - Sid: AllowSnsSend
+          Effect: Allow
+          Principal:
+            Service:
+              - 'sns.amazonaws.com'
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalPublishSohDataDLQ.Arn                                                  
+  VendorPortalReportingOpSohDLQ: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId:
+        Fn::ImportValue: !Sub "${KmsStack}::RelayKMSKey"
+      QueueName: !Sub "vendorportal-reporting-op-soh-dlq-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 20     
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-reporting-op-soh-dlq"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalReportingOpSohDLQPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalReportingOpSohDLQ        
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalReportingOpSohDLQ.Arn
+        - Sid: AllowSnsSend
+          Effect: Allow
+          Principal:
+            Service:
+              - 'sns.amazonaws.com'
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalReportingOpSohDLQ.Arn            
+  
+            
+  VendorPortalPublishedOrdersQueue: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId:
+        Fn::ImportValue: !Sub "${KmsStack}::RelayKMSKey"
+      QueueName: !Sub "vendorportal-published-orders-sqs-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 20
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt VendorPortalPublishedOrdersDLQ.Arn
+        maxReceiveCount: 5
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-published-orders-queue"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalPublishedOrdersQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalPublishedOrdersQueue        
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalPublishedOrdersQueue.Arn
+        - Sid: AllowSnsSend
+          Effect: Allow
+          Principal:
+            Service:
+              - 'sns.amazonaws.com'
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalPublishedOrdersQueue.Arn                         
+  VendorPortalPublishedOrdersDLQ: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId:
+        Fn::ImportValue: !Sub "${KmsStack}::RelayKMSKey"
+      QueueName: !Sub "vendorportal-published-orders-dlq-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 20     
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-published-orders-dlq"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalPublishedOrdersDlqPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalPublishedOrdersDLQ        
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalPublishedOrdersDLQ.Arn
+        - Sid: AllowSnsSend
+          Effect: Allow
+          Principal:
+            Service:
+              - 'sns.amazonaws.com'
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalPublishedOrdersDLQ.Arn                                             
+          
+  VendorPortalSupplierInvitationQueue: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId:
+        Fn::ImportValue: !Sub "${KmsStack}::RelayKMSKey"
+      QueueName: !Sub "vendorportal-supplier-invitation-sqs-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 20
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt VendorPortalSupplierInvitationDLQ.Arn
+        maxReceiveCount: 5
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-supplier-invitation-queue"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalSupplierInvitationQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalSupplierInvitationQueue        
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalSupplierInvitationQueue.Arn
+        - Sid: AllowSnsSend
+          Effect: Allow
+          Principal:
+            Service:
+              - 'sns.amazonaws.com'
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalSupplierInvitationQueue.Arn                         
+  VendorPortalSupplierInvitationDLQ: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId:
+        Fn::ImportValue: !Sub "${KmsStack}::RelayKMSKey"
+      QueueName: !Sub "vendorportal-supplier-invitation-dlq-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 20     
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-supplier-invitation-dlq"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalSupplierInvitationDLQPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalSupplierInvitationDLQ        
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalSupplierInvitationDLQ.Arn
+        - Sid: AllowSnsSend
+          Effect: Allow
+          Principal:
+            Service:
+              - 'sns.amazonaws.com'
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalSupplierInvitationDLQ.Arn
+
+  VendorPortalSupplierEventsQueue: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId:
+        Fn::ImportValue: !Sub "${KmsStack}::RelayKMSKey"
+      QueueName: !Sub "vendorportal-supplier-events-sqs-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 20
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt VendorPortalSupplierEventsDLQ.Arn
+        maxReceiveCount: 5
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-supplier-events-queue"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalSupplierEventsQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalSupplierEventsQueue        
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalSupplierEventsQueue.Arn
+        - Sid: AllowSnsSend
+          Effect: Allow
+          Principal:
+            Service:
+              - 'sns.amazonaws.com'
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalSupplierEventsQueue.Arn                         
+  VendorPortalSupplierEventsDLQ: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId:
+        Fn::ImportValue: !Sub "${KmsStack}::RelayKMSKey"
+      QueueName: !Sub "vendorportal-supplier-Events-dlq-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 20     
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-supplier-events-dlq"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalSupplierEventsDLQPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalSupplierEventsDLQ        
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalSupplierEventsDLQ.Arn
+        - Sid: AllowSnsSend
+          Effect: Allow
+          Principal:
+            Service:
+              - 'sns.amazonaws.com'
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalSupplierEventsDLQ.Arn
+
+  VendorPortalSupplierMappingQueue: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId:
+        Fn::ImportValue: !Sub "${KmsStack}::RelayKMSKey"
+      QueueName: !Sub "vendorportal-supplier-mapping-sqs-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 20
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt VendorPortalSupplierMappingDLQ.Arn
+        maxReceiveCount: 5
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-supplier-mapping-queue"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalSupplierMappingQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalSupplierMappingQueue        
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalSupplierMappingQueue.Arn
+        - Sid: AllowSnsSend
+          Effect: Allow
+          Principal:
+            Service:
+              - 'sns.amazonaws.com'
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalSupplierMappingQueue.Arn                         
+  VendorPortalSupplierMappingDLQ: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId:
+        Fn::ImportValue: !Sub "${KmsStack}::RelayKMSKey"
+      QueueName: !Sub "vendorportal-supplier-mapping-dlq-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 20     
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-supplier-mapping-dlq"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalSupplierMappingDLQPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalSupplierMappingDLQ        
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalSupplierMappingDLQ.Arn
+        - Sid: AllowSnsSend
+          Effect: Allow
+          Principal:
+            Service:
+              - 'sns.amazonaws.com'
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalSupplierMappingDLQ.Arn
+
+
+
+
+  VendorPortalFactoryEventsQueue: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId:
+        Fn::ImportValue: !Sub "${KmsStack}::RelayKMSKey"
+      QueueName: !Sub "vendorportal-factory-events-sqs-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 20
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt VendorPortalFactoryEventsDLQ.Arn
+        maxReceiveCount: 5
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-Factory-events-queue"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalFactoryEventsQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalFactoryEventsQueue        
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalFactoryEventsQueue.Arn
+        - Sid: AllowSnsSend
+          Effect: Allow
+          Principal:
+            Service:
+              - 'sns.amazonaws.com'
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalFactoryEventsQueue.Arn                         
+  VendorPortalFactoryEventsDLQ: 
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      KmsMasterKeyId:
+        Fn::ImportValue: !Sub "${KmsStack}::RelayKMSKey"
+      QueueName: !Sub "vendorportal-factory-events-dlq-${Environment}"
+      MessageRetentionPeriod: 345600 #4 days
+      ReceiveMessageWaitTimeSeconds: 20     
+      VisibilityTimeout: 1200
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-Factory-Events-dlq"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalFactoryEventsDLQPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: 
+        - !Ref VendorPortalFactoryEventsDLQ        
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AllowSend
+        Statement:
+        - Sid: AllowSend
+          Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalFactoryEventsDLQ.Arn
+        - Sid: AllowSnsSend
+          Effect: Allow
+          Principal:
+            Service:
+              - 'sns.amazonaws.com'
+          Action: ['sqs:SendMessage']
+          Resource: !GetAtt VendorPortalFactoryEventsDLQ.Arn                                             
+          
+Outputs:      
+  VendorPortalStockInHandIngestionQueueArn:
+    Value: !GetAtt VendorPortalStockInHandIngestionQueue.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalStockInHandIngestionQueue
+  VendorPortalReportingOpAndSohQueueArn:
+    Value: !GetAtt VendorPortalReportingOpAndSohQueue.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalReportingOpAndSohQueue
+  VendorPortalSohNotificationTopic:      
+      Description: A reference to the SOH Notification SNS
+      Value: !Ref VendorPortalSohNotificationTopic
+      Export:
+        Name: !Sub ${AWS::StackName}::SohNotificationTopic        
+  VendorPortalPublishedOrdersQueueArn:
+    Value: !GetAtt VendorPortalPublishedOrdersQueue.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalPublishedOrdersQueueArn
+  VendorPortalPublishSohDataQueueArn:                        
+    Value: !GetAtt VendorPortalPublishSohDataQueue.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalPublishSohDataQueueArn
+  VendorPortalSupplierInvitationQueue:                        
+    Value: !GetAtt VendorPortalSupplierInvitationQueue.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalSupplierInvitationQueueArn
+  VendorPortalSupplierEventsQueue:                        
+    Value: !GetAtt VendorPortalSupplierEventsQueue.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalSupplierEventsQueueArn
+  VendorPortalFactoryEventsQueue:                        
+    Value: !GetAtt VendorPortalFactoryEventsQueue.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalFactoryEventsQueue
+  VendorPortalAppCommitmentDataLoadFifoQueue:                        
+    Value: !GetAtt VendorPortalAppCommitmentDataLoadFifoQueue.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalAppCommitmentDataLoadFifoQueue                
+  VendorPortalSupplierRegistrationPublishQueue:                        
+    Value: !GetAtt VendorPortalSupplierRegistrationPublishQueue.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalSupplierRegistrationPublishQueue
+  VendorPortalOpvsaoAggregateOrdersQueue:                        
+    Value: !GetAtt VendorPortalOpvsaoAggregateOrdersQueue.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalOpvsaoAggregateOrdersQueue          

@@ -1,0 +1,622 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+    Vendorportal cluster - security groups
+Parameters:
+  EnableDevAccess:
+    Default: "false"
+    Type: String
+  BillingTag:
+    Default: "vendorportal"
+    Type: "String"
+  OwnerTag:
+    Default: "vendorportal"
+    Type: "String"
+  ProjectTag:
+    Default: "vendorportal"
+    Type: "String"
+  Environment:
+    Default: "dev"
+    AllowedValues: [dev, prod, nonprod]
+    Type: "String"
+    ConstraintDescription: must specify prod, dev, or nonprod.
+  VpcBaseStack:
+    Type: String
+    AllowedPattern: '[A-Za-z][A-Za-z0-9-]{0,127}'
+  DocdbPort:
+    Type: String
+    Default: 27017
+
+Conditions:
+  EnableDevAccess: !Equals [ !Ref EnableDevAccess, "true" ]
+  IsDev: !Equals [ !Ref Environment, "dev" ]
+  IsProd: !Equals [ !Ref Environment, "prod" ]
+
+Resources:
+  VendorPortalCfIpPrefixList:
+    Type: AWS::EC2::PrefixList
+    Properties: 
+      AddressFamily: IPv4
+      MaxEntries: 150
+      PrefixListName: vendorportal-cloudfront-ip-list
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-cloudfront-ip"
+        - Key: Billing
+          Value: !Sub "${BillingTag}"
+        - Key: Environment
+          Value: !Sub "${Environment}"        
+        - Key: Owner
+          Value: !Sub "${OwnerTag}"
+        - Key: Project
+          Value: !Sub "${ProjectTag}"
+  VendorPortalCFIpPrefixList:
+    Type: AWS::EC2::PrefixList
+    Properties: 
+      AddressFamily: IPv4
+      MaxEntries: 160
+      PrefixListName: vendorportal-cloudfront-ip-ranges
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-cloudfront-ip"
+        - Key: Billing
+          Value: !Sub "${BillingTag}"
+        - Key: Environment
+          Value: !Sub "${Environment}"        
+        - Key: Owner
+          Value: !Sub "${OwnerTag}"
+        - Key: Project
+          Value: !Sub "${ProjectTag}"
+  VendorPortalRedisSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-sg-redis"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag
+      VpcId:
+        Fn::ImportValue: !Sub "${VpcBaseStack}::VpcId"
+      GroupDescription: Access to the ECS hosts and the tasks/containers that run on them
+      SecurityGroupIngress:
+        # Only allow inbound access to ECS from the ELB
+        - SourceSecurityGroupId: !Ref VendorPortalECSHostSecurityGroup
+          IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+        - IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          CidrIp: '10.233.144.0/19' #VPN         
+        - IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          CidrIp: '10.240.20.0/22' #Aws worspace
+        - IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          CidrIp: '172.30.194.88/16' #Aws worspace
+        - IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          CidrIp: '10.50.0.0/17'
+          Description: 'GlobalProtect MPVN'
+  VendorPortalRedisDeveloperSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-sg-redis-developer"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag
+      VpcId:
+        Fn::ImportValue: !Sub "${VpcBaseStack}::VpcId"
+      GroupDescription: Access from VPN and AWS Workspaces
+      SecurityGroupIngress:        
+        - IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          CidrIp: '10.233.144.0/19' #VPN         
+        - IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          CidrIp: '10.240.20.0/22' #Aws worspace
+        - IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          CidrIp: '172.30.194.88/16' #Aws worspace                
+
+  VendorPortalECSHostSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId:
+        Fn::ImportValue: !Sub "${VpcBaseStack}::VpcId"
+      GroupDescription: Access to the ECS hosts and the tasks/containers that run on them
+      SecurityGroupIngress:
+          #Only allow inbound access to ECS from the ELB
+          - SourceSecurityGroupId: !Ref VendorportalPublicALBCFSecurityGroup
+            IpProtocol: "-1"
+          # - !If 
+          #     - EnableDevAccess 
+          #     - SourceSecurityGroupId: !Ref VendorportalPublicALBDevSecurityGroup
+          #       IpProtocol: "-1"
+          #     -  !Ref AWS::NoValue
+          - SourceSecurityGroupId: !Ref VendorportalInternalALBSecurityGroup
+            IpProtocol: "-1"          
+          - IpProtocol: tcp
+            FromPort: 22
+            ToPort: 22
+            CidrIp: '10.233.144.0/19' #VPN         
+          - IpProtocol: tcp
+            FromPort: 22
+            ToPort: 22
+            CidrIp: '10.240.20.0/22' #Aws worspace
+          - IpProtocol: tcp
+            FromPort: 8000
+            ToPort: 9000
+            CidrIp: '172.30.194.88/16' #Aws worspace     
+          - IpProtocol: tcp
+            FromPort: 30000
+            ToPort: 60000
+            CidrIp: '10.233.144.0/19' #VPN
+          - IpProtocol: tcp
+            FromPort: 22
+            ToPort: 22
+            CidrIp: '10.50.0.0/17'
+            Description: 'GlobalProtect MPVN' 
+          - IpProtocol: tcp
+            FromPort: 8000
+            ToPort: 9000
+            CidrIp: '10.50.0.0/17'
+            Description: 'GlobalProtect MPVN'     
+          - IpProtocol: tcp
+            FromPort: 30000
+            ToPort: 60000
+            CidrIp: '10.50.0.0/17'
+            Description: 'GlobalProtect MPVN' 
+          - !If
+              - IsDev
+              - IpProtocol: tcp
+                FromPort: 22
+                ToPort: 22
+                CidrIp: '172.30.194.88/16' #Aws worspace KAS VPN
+              - !Ref AWS::NoValue
+          - !If
+              - IsDev
+              - IpProtocol: tcp
+                FromPort: 3389
+                ToPort: 3389
+                CidrIp: '172.30.194.88/16' #KAS VPN
+              - !Ref AWS::NoValue            
+                              
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-sg-ecshost"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+
+
+  VendorportalPublicALBDevSecurityGroup:
+    Condition: EnableDevAccess
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-sg-public-alb"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag
+      VpcId:
+        Fn::ImportValue: !Sub "${VpcBaseStack}::VpcId"
+      GroupDescription: Access to the load balancer that sits in front of ECS
+      SecurityGroupIngress:
+          # Allow access from anywhere (kmart) to our ECS services
+          - CidrIp: 0.0.0.0/0
+            IpProtocol: "tcp"
+            FromPort: 443
+            ToPort: 443
+  VendorportalPublicALBCFSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-sg-public-alb"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag
+      VpcId:
+        Fn::ImportValue: !Sub "${VpcBaseStack}::VpcId"
+      GroupDescription: Access to the load balancer that sits in front of ECS
+      SecurityGroupIngress:
+          # Allow access from anywhere (kmart) to our ECS services
+          - SourcePrefixListId: !Ref VendorPortalCFIpPrefixList
+            IpProtocol: "tcp"
+            FromPort: 443
+            ToPort: 443
+  VendorPortalRDSSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      Tags:
+          - Key: Name
+            Value: !Sub "${AWS::StackName}-sg-rds"
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+      GroupDescription: "RDS Security Group"
+      VpcId:
+        Fn::ImportValue: "infra-vpc-base::VpcId"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: '172.30.0.0/15'
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: '10.233.144.0/23'  # VPN range
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: '10.233.152.0/22'  # VPN range
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: '10.240.20.0/22' #Aws worspace
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: '10.240.137.55/32' #Aws worspace
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref VendorPortalECSHostSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432          
+          CidrIp: '10.50.0.0/17'
+          Description: 'GlobalProtect MPVN' 
+  VendorportalInternalALBSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-sg-internal-alb"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag
+      GroupDescription: "Open costing Api ALB Group"
+      VpcId: !ImportValue "infra-vpc-base::VpcId"
+      SecurityGroupIngress:
+        - !If
+          - IsProd
+          - !Ref AWS::NoValue
+          - IpProtocol: tcp
+            FromPort: 443
+            ToPort: 443
+            CidrIp: '10.239.0.0/16'
+            Description: 'azure VM'
+        - !If
+          - IsProd
+          - !Ref AWS::NoValue
+          - IpProtocol: tcp
+            FromPort: 443
+            ToPort: 443
+            CidrIp: '172.31.0.0/16'
+            Description: Mulgrave
+        - !If                
+          - IsProd
+          - !Ref AWS::NoValue  
+          - IpProtocol: tcp
+            FromPort: 443
+            ToPort: 443
+            CidrIp: '172.30.128.0/17'
+            Description: KAS Services
+        - !If                
+          - IsProd
+          - !Ref AWS::NoValue              
+          - IpProtocol: tcp
+            FromPort: 443
+            ToPort: 443
+            CidrIp: '172.30.178.0/24'
+            Description: HK VPN
+        - !If                
+          - IsProd
+          # - !Ref AWS::NoValue              
+          - IpProtocol: tcp
+            FromPort: 443
+            ToPort: 443
+            CidrIp: '10.233.152.0/22'
+            Description: AUS VPN review 31st Jan 2022        
+          - IpProtocol: tcp
+            FromPort: 443
+            ToPort: 443
+            CidrIp: '10.233.152.0/22'
+            Description: AUS VPN          
+        # - !If                
+        #   - IsProd
+        #   # - !Ref AWS::NoValue              
+        #   - IpProtocol: tcp
+        #     FromPort: 443
+        #     ToPort: 443
+        #     CidrIp: '10.233.144.0/23'
+        #     Description: AUS VPN review 31st Jan 2022        
+        #   - IpProtocol: tcp
+        #     FromPort: 443
+        #     ToPort: 443
+        #     CidrIp: '10.233.144.0/23'
+        #     Description: AUS VPN          
+        - !If                
+          - IsProd
+          - !Ref AWS::NoValue              
+          - IpProtocol: tcp
+            FromPort: 443
+            ToPort: 443
+            CidrIp: '10.240.20.0/22'
+            Description: aws workspace
+        - !If                
+          - IsProd
+          - !Ref AWS::NoValue              
+          - IpProtocol: tcp
+            FromPort: 443
+            ToPort: 443
+            CidrIp: '10.233.30.0/23'
+            Description: old VDIs (pre Workspaces)
+        - !If                
+          - IsProd
+          # - !Ref AWS::NoValue              
+          - IpProtocol: tcp
+            FromPort: 443
+            ToPort: 443
+            CidrIp: '10.50.0.0/17'
+            Description: 'GlobalProtect MPVN'
+          - IpProtocol: tcp
+            FromPort: 443
+            ToPort: 443
+            CidrIp: '10.50.0.0/17'
+            Description: 'GlobalProtect MPVN'                      
+            
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref VendorportalLambdaSecurityGroup
+          Description: Lambda Functions
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref VendorportalPublicALBSecurityGroup
+          Description: Public SG          
+        # - IpProtocol: tcp
+        #   FromPort: 80
+        #   ToPort: 80
+        #   CidrIp: '172.30.0.0/15'                               
+        # - IpProtocol: tcp
+        #   FromPort: 80
+        #   ToPort: 80
+        #   CidrIp: '10.233.30.0/23'
+        # - IpProtocol: tcp
+        #   FromPort: 80
+        #   ToPort: 80
+        #   CidrIp: '10.233.144.0/23'
+        # - IpProtocol: tcp
+        #   FromPort: 80
+        #   ToPort: 80
+        #   CidrIp: '10.233.152.0/22'
+        # - IpProtocol: tcp
+        #   FromPort: 80
+        #   ToPort: 80
+        #   CidrIp: '10.240.20.0/22' #Aws worspace
+  # AllowAccessToALBFromECSCluster:
+  #   Type: "AWS::EC2::SecurityGroupIngress"
+  #   Properties:
+  #     SourceSecurityGroupId: !Ref VendorPortalECSHostSecurityGroup
+  #     GroupId: !Ref VendorportalInternalALBSecurityGroup
+  #     IpProtocol: tcp
+  #     FromPort: 80
+  #     ToPort: 80
+  #     Description: 
+  AllowAccessToHTTPSALBFromECSCluster:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    Properties:
+      SourceSecurityGroupId: !Ref VendorPortalECSHostSecurityGroup
+      GroupId: !Ref VendorportalInternalALBSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443  
+      Description: ECS host to Internal ALB access
+  DocdbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-sg-docdb"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag      
+      VpcId:
+        Fn::ImportValue: !Sub "${VpcBaseStack}::VpcId"
+      GroupDescription: docdb access
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: !Ref DocdbPort
+        ToPort: !Ref DocdbPort
+        SourceSecurityGroupId: !Ref VendorportalLambdaSecurityGroup     
+      - IpProtocol: tcp
+        FromPort: !Ref DocdbPort 
+        ToPort: !Ref DocdbPort 
+        CidrIp: '10.233.144.0/20' #Aus VPN
+      - IpProtocol: tcp
+        FromPort: !Ref DocdbPort
+        ToPort: !Ref DocdbPort
+        SourceSecurityGroupId: !Ref VendorPortalECSHostSecurityGroup
+      - IpProtocol: tcp
+        FromPort: !Ref DocdbPort
+        ToPort: !Ref DocdbPort
+        CidrIp: '172.30.128.0/17' #KASS
+      - IpProtocol: tcp
+        FromPort: !Ref DocdbPort
+        ToPort: !Ref DocdbPort
+        CidrIp: '10.240.20.0/22' #Aws worspace
+      - IpProtocol: tcp
+        FromPort: !Ref DocdbPort
+        ToPort: !Ref DocdbPort
+        CidrIp: '10.50.0.0/17'
+        Description: 'GlobalProtect MPVN'        
+  VendorportalPublicALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-sg-public-alb"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag
+      VpcId:
+        Fn::ImportValue: !Sub "${VpcBaseStack}::VpcId"
+      GroupDescription: Access to the load balancer that sits in front of ECS
+      SecurityGroupIngress:
+          # Allow access from anywhere (kmart) to our ECS services
+          - CidrIp: 0.0.0.0/0
+            IpProtocol: "tcp"
+            FromPort: 443
+            ToPort: 443
+  VendorportalLambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-sg-lambda"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag
+      VpcId:
+        Fn::ImportValue: !Sub "${VpcBaseStack}::VpcId"
+      GroupDescription: Security group for vendorportal lambda
+      SecurityGroupIngress:          
+          - CidrIp: 
+              Fn::ImportValue: !Sub "${VpcBaseStack}::VpcCidrRange"
+            IpProtocol: "tcp"
+            FromPort: 443
+            ToPort: 443            
+Outputs:
+
+  VendorPortalECSHostSecurityGroup:
+      Description: A reference to the security group for ECS hosts
+      Value: !Ref VendorPortalECSHostSecurityGroup
+      Export:
+        Name: !Sub ${AWS::StackName}::VendorPortalECSHostSecurityGroup
+
+  VendorportalPublicALBDevSecurityGroup:
+    Condition: EnableDevAccess
+    Description: A reference to the security group for alb for non-cf access
+    Value: !Ref VendorportalPublicALBDevSecurityGroup
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorportalPublicALBDevSecurityGroup
+  VendorportalPublicALBCFSecurityGroup:
+      Description: A reference to the security group for alb for cf access
+      Value: !Ref VendorportalPublicALBCFSecurityGroup
+      Export:
+        Name: !Sub ${AWS::StackName}::VendorportalPublicALBCFSecurityGroup        
+
+  VendorportalInternalALBSecurityGroup:
+      Description: A reference to the security group for load balancer
+      Value: !Ref VendorportalInternalALBSecurityGroup
+      Export:
+        Name: !Sub ${AWS::StackName}::VendorportalInternalALBSecurityGroup
+
+  VendorPortalRDSSecurityGroup:
+      Description: A reference to the security group for RDS
+      Value: !Ref VendorPortalRDSSecurityGroup
+      Export:
+        Name: !Sub ${AWS::StackName}::VendorPortalRDSSecurityGroup
+        
+  VendorPortalRedisSecurityGroup:
+      Description: A reference to the security group for Redis
+      Value: !Ref VendorPortalRedisSecurityGroup
+      Export:
+        Name: !Sub ${AWS::StackName}::VendorPortalRedisSecurityGroup
+
+  VendorPortalDocdbSecurityGroup:
+      Description: A reference to the security group for Documentdb
+      Value: !Ref DocdbSecurityGroup
+      Export:
+        Name: !Sub ${AWS::StackName}::DocdbSecurityGroup
+
+  
+  VendorPortalRedisDeveloperSecurityGroup:
+      Description: A reference to the security group for Redis development
+      Value: !Ref VendorPortalRedisDeveloperSecurityGroup
+      Export:
+        Name: !Sub ${AWS::StackName}::VendorPortalRedisDeveloperSecurityGroup  
+  VendorPortalCFIpPrefixList:
+      Description: A reference to the Prefix list for cloudfront
+      Value: !Ref VendorPortalCFIpPrefixList
+      Export:
+        Name: !Sub ${AWS::StackName}::VendorPortalCFIpPrefixList
+  VendorPortalCfIpPrefixList:
+      Description: A reference to the Prefix list for cloudfront
+      Value: !Ref VendorPortalCfIpPrefixList
+      Export:
+        Name: !Sub ${AWS::StackName}::VendorPortalCfIpPrefixList        
+  VendorportalPublicALBSecurityGroup:
+      Description: A reference to the security group for load balancer
+      Value: !Ref VendorportalPublicALBSecurityGroup
+      Export:
+        Name: !Sub ${AWS::StackName}::VendorportalPublicALBSecurityGroup
+  VendorportalLambdaSecurityGroup:
+      Description: A reference to the security group for lambda
+      Value: !Ref VendorportalLambdaSecurityGroup
+      Export:
+        Name: !Sub ${AWS::StackName}::VendorportalLambdaSecurityGroup        

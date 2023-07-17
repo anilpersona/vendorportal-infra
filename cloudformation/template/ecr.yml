@@ -1,0 +1,2305 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: ECR Repository for Sourcing vendor portal project
+
+Resources:
+  VendorPortalOrderPollerImageRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "vendorportal/orders-poller"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: CurrentAccountPush
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:PutImage'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:CompleteLayerUpload'
+          - Sid: AllowPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - 'arn:aws:iam::187628286232:root'  # dev
+                - 'arn:aws:iam::318263296841:root'  # nonprod
+                - 'arn:aws:iam::563000599290:root'  # prod
+                - arn:aws:iam::847029211010:user/infra-prjauth-vendorportal
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Image retention 1",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["prod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 2,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["nonprod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 3,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["dev"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }
+  VendorPortalFactoryDssAdapterImageRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "vendorportal/factory-dss-adapter"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: CurrentAccountPush
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:PutImage'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:CompleteLayerUpload'
+          - Sid: AllowPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - 'arn:aws:iam::187628286232:root'  # dev
+                - 'arn:aws:iam::318263296841:root'  # nonprod
+                - 'arn:aws:iam::563000599290:root'  # prod
+                - arn:aws:iam::847029211010:user/infra-prjauth-vendorportal
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Image retention 1",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["prod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 2,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["nonprod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 3,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["dev"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }
+
+  VendorPortalSupplierRegistrationImageRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "vendorportal/supplier-registration"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: CurrentAccountPush
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:PutImage'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:CompleteLayerUpload'
+          - Sid: AllowPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - 'arn:aws:iam::187628286232:root'  # dev
+                - 'arn:aws:iam::318263296841:root'  # nonprod
+                - 'arn:aws:iam::563000599290:root'  # prod
+                - arn:aws:iam::847029211010:user/infra-prjauth-vendorportal
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Image retention 1",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["prod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 2,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["nonprod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 3,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["dev"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }
+  VendorPortalSupplierDssAdapterImageRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "vendorportal/supplier-dss-adapter"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: CurrentAccountPush
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:PutImage'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:CompleteLayerUpload'
+          - Sid: AllowPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - 'arn:aws:iam::187628286232:root'  # dev
+                - 'arn:aws:iam::318263296841:root'  # nonprod
+                - 'arn:aws:iam::563000599290:root'  # prod
+                - arn:aws:iam::847029211010:user/infra-prjauth-vendorportal
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Image retention 1",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["prod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 2,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["nonprod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 3,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["dev"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }            
+  VendorPortalGmCommitmentDataImageRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "vendorportal/gm-commitment-data"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: CurrentAccountPush
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:PutImage'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:CompleteLayerUpload'
+          - Sid: AllowPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - 'arn:aws:iam::187628286232:root'  # dev
+                - 'arn:aws:iam::318263296841:root'  # nonprod
+                - 'arn:aws:iam::563000599290:root'  # prod
+                - arn:aws:iam::847029211010:user/infra-prjauth-vendorportal
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Image retention 1",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["prod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 2,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["nonprod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 3,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["dev"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }
+  VendorPortalOpReconciliationImageRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "vendorportal/op-reconciliation"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: CurrentAccountPush
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:PutImage'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:CompleteLayerUpload'
+          - Sid: AllowPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - 'arn:aws:iam::187628286232:root'  # dev
+                - 'arn:aws:iam::318263296841:root'  # nonprod
+                - 'arn:aws:iam::563000599290:root'  # prod
+                - arn:aws:iam::847029211010:user/infra-prjauth-vendorportal
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Image retention 1",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["prod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 2,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["nonprod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 3,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["dev"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }            
+
+  VendorPortalOrderComparisonImageRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "vendorportal/ordercomparison-report"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: CurrentAccountPush
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:PutImage'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:CompleteLayerUpload'
+          - Sid: AllowPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - 'arn:aws:iam::187628286232:root'  # dev
+                - 'arn:aws:iam::318263296841:root'  # nonprod
+                - 'arn:aws:iam::563000599290:root'  # prod
+                - arn:aws:iam::847029211010:user/infra-prjauth-vendorportal
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Image retention 1",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["prod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 2,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["nonprod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 3,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["dev"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }
+  VendorPortalAppsOnboardingImageRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "vendorportal/apps-onboarding"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: CurrentAccountPush
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:PutImage'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:CompleteLayerUpload'
+          - Sid: AllowPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - 'arn:aws:iam::187628286232:root'  # dev
+                - 'arn:aws:iam::318263296841:root'  # nonprod
+                - 'arn:aws:iam::563000599290:root'  # prod
+                - arn:aws:iam::847029211010:user/infra-prjauth-vendorportal
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Image retention 1",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["prod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 2,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["nonprod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 3,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["dev"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }
+  VendorPortalIdentityMgmtImageRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "vendorportal/identity-mgmt"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: CurrentAccountPush
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:PutImage'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:CompleteLayerUpload'
+          - Sid: AllowPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - 'arn:aws:iam::187628286232:root'  # dev
+                - 'arn:aws:iam::318263296841:root'  # nonprod
+                - 'arn:aws:iam::563000599290:root'  # prod
+                - arn:aws:iam::847029211010:user/infra-prjauth-vendorportal
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Image retention 1",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["prod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 2,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["nonprod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 3,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["dev"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }
+  VendorPortalCommitmentDataImageRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "vendorportal/commitment-data"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: CurrentAccountPush
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:PutImage'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:CompleteLayerUpload'
+          - Sid: AllowPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - 'arn:aws:iam::187628286232:root'  # dev
+                - 'arn:aws:iam::318263296841:root'  # nonprod
+                - 'arn:aws:iam::563000599290:root'  # prod
+                - arn:aws:iam::847029211010:user/infra-prjauth-vendorportal
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Image retention 1",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["prod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 2,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["nonprod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 3,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["dev"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }
+  VendorPortalReportingImageRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "vendorportal/reportingapi"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: CurrentAccountPush
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:PutImage'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:CompleteLayerUpload'
+          - Sid: AllowPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - 'arn:aws:iam::187628286232:root'  # dev
+                - 'arn:aws:iam::318263296841:root'  # nonprod
+                - 'arn:aws:iam::563000599290:root'  # prod
+                - arn:aws:iam::847029211010:user/infra-prjauth-vendorportal
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Image retention 1",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["prod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 2,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["nonprod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 3,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["dev"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }
+  VendorPortalOtelImageRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "vendorportal/otel-aws"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: CurrentAccountPush
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:PutImage'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:CompleteLayerUpload'
+          - Sid: AllowPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - 'arn:aws:iam::187628286232:root'  # dev
+                - 'arn:aws:iam::318263296841:root'  # nonprod
+                - 'arn:aws:iam::563000599290:root'  # prod
+                - arn:aws:iam::847029211010:user/infra-prjauth-vendorportal
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Image retention 1",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["prod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 2,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["nonprod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 3,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["dev"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }
+  VendorPortalStockOnHandImageRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "vendorportal/stock-on-hand"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: CurrentAccountPush
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:PutImage'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:CompleteLayerUpload'
+          - Sid: AllowPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - 'arn:aws:iam::187628286232:root'  # dev
+                - 'arn:aws:iam::318263296841:root'  # nonprod
+                - 'arn:aws:iam::563000599290:root'  # prod
+                - arn:aws:iam::847029211010:user/infra-prjauth-vendorportal
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Image retention 1",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["prod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 2,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["nonprod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 3,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["dev"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }
+  VendorPortalBaseTestAutomationImageRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "vendorportal/testauto-base"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: CurrentAccountPush
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:PutImage'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:CompleteLayerUpload'
+          - Sid: AllowPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - 'arn:aws:iam::187628286232:root'  # dev
+                - 'arn:aws:iam::318263296841:root'  # nonprod
+                - 'arn:aws:iam::563000599290:root'  # prod
+                - arn:aws:iam::847029211010:user/infra-prjauth-vendorportal
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Image retention 1",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["prod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 2,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["nonprod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 3,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["dev"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }
+  VendorPortalTestAutomationImageRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "vendorportal/testauto"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: CurrentAccountPush
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:PutImage'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:CompleteLayerUpload'
+          - Sid: AllowPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - 'arn:aws:iam::187628286232:root'  # dev
+                - 'arn:aws:iam::318263296841:root'  # nonprod
+                - 'arn:aws:iam::563000599290:root'  # prod
+                - arn:aws:iam::847029211010:user/infra-prjauth-vendorportal
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Image retention 1",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["prod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 2,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["nonprod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 3,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["dev"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }              
+  VendorPortalBaseNodejsImageRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "vendorportal/nodejs-base"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          # Reference to current account under the assumption of deployment to the
+          # artefact account
+          - Sid: CurrentAccountPush
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:PutImage'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:CompleteLayerUpload'
+          - Sid: AllowPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - 'arn:aws:iam::187628286232:root'  # dev
+                - 'arn:aws:iam::318263296841:root'  # nonprod
+                - 'arn:aws:iam::563000599290:root'  # prod
+                - arn:aws:iam::847029211010:user/infra-prjauth-vendorportal
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Image retention 1",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["prod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 2,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["nonprod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 3,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["dev"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }
+  VendorPortalAWSPythonSDKImageRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "vendorportal/pythonsdk-aws"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          # Reference to current account under the assumption of deployment to the
+          # artefact account
+          - Sid: CurrentAccountPush
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:PutImage'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:CompleteLayerUpload'
+          - Sid: AllowPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - 'arn:aws:iam::187628286232:root'  # dev
+                - 'arn:aws:iam::318263296841:root'  # nonprod
+                - 'arn:aws:iam::563000599290:root'  # prod
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Image retention 1",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["prod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 2,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["nonprod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 3,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["dev"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }
+  VendorPortalNodeAwsImageRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "vendorportal/node-aws"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          # Reference to current account under the assumption of deployment to the
+          # artefact account
+          - Sid: CurrentAccountPush
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:PutImage'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:CompleteLayerUpload'
+          - Sid: AllowPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - 'arn:aws:iam::187628286232:root'  # dev
+                - 'arn:aws:iam::318263296841:root'  # nonprod
+                - 'arn:aws:iam::563000599290:root'  # prod
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Image retention 1",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["prod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 2,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["nonprod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 3,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["dev"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }
+  VendorPortalNodeImageRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "vendorportal/node-common"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          # Reference to current account under the assumption of deployment to the
+          # artefact account
+          - Sid: CurrentAccountPush
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:PutImage'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:CompleteLayerUpload'
+          - Sid: AllowPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - 'arn:aws:iam::187628286232:root'  # dev
+                - 'arn:aws:iam::318263296841:root'  # nonprod
+                - 'arn:aws:iam::563000599290:root'  # prod
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Image retention 1",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["prod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 2,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["nonprod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 3,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["dev"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }            
+  VendorPortalNodeTestImageRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "vendorportal/node-test"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          # Reference to current account under the assumption of deployment to the
+          # artefact account
+          - Sid: CurrentAccountPush
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:PutImage'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:CompleteLayerUpload'
+          - Sid: AllowPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - 'arn:aws:iam::187628286232:root'  # dev
+                - 'arn:aws:iam::318263296841:root'  # nonprod
+                - 'arn:aws:iam::563000599290:root'  # prod
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Image retention 1",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["prod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 2,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["nonprod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 3,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["dev"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }                        
+  VendorPortalFacadeImageRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "vendorportal/facade"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          # Reference to current account under the assumption of deployment to the
+          # artefact account
+          - Sid: CurrentAccountPush
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:PutImage'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:CompleteLayerUpload'
+          - Sid: AllowPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - 'arn:aws:iam::187628286232:root'  # dev
+                - 'arn:aws:iam::318263296841:root'  # nonprod
+                - 'arn:aws:iam::563000599290:root'  # prod
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Image retention 1",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["prod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 2,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["nonprod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 3,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["dev"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }                                    
+  VendorPortalApiAuthImageRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "vendorportal/auth"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          # Reference to current account under the assumption of deployment to the
+          # artefact account
+          - Sid: CurrentAccountPush
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:PutImage'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:CompleteLayerUpload'
+          - Sid: AllowPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - 'arn:aws:iam::187628286232:root'  # dev
+                - 'arn:aws:iam::318263296841:root'  # nonprod
+                - 'arn:aws:iam::563000599290:root'  # prod
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Image retention 1",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["prod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 2,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["nonprod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 3,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["dev"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }    
+  VendorPortalOsbMasterDataManagementServiceRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "vendorportal/osb-master-data-management-service"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          # Reference to current account under the assumption of deployment to the
+          # artefact account
+          - Sid: CurrentAccountPush
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:PutImage'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:CompleteLayerUpload'
+          - Sid: AllowPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - 'arn:aws:iam::187628286232:root'  # dev
+                - 'arn:aws:iam::318263296841:root'  # nonprod
+                - 'arn:aws:iam::563000599290:root'  # prod
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Image retention 1",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["prod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 2,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["nonprod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 3,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["dev"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }                                            
+  VendorPortalProductServiceImageRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "vendorportal/product-service"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          # Reference to current account under the assumption of deployment to the
+          # artefact account
+          - Sid: CurrentAccountPush
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:PutImage'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:CompleteLayerUpload'
+          - Sid: AllowPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - 'arn:aws:iam::187628286232:root'  # dev
+                - 'arn:aws:iam::318263296841:root'  # nonprod
+                - 'arn:aws:iam::563000599290:root'  # prod
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Image retention 1",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["prod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 2,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["nonprod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 3,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["dev"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }
+  VendorPortalOrderProjectionImageRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "vendorportal/order-projection"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          # Reference to current account under the assumption of deployment to the
+          # artefact account
+          - Sid: CurrentAccountPush
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:PutImage'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:CompleteLayerUpload'
+          - Sid: AllowPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - 'arn:aws:iam::187628286232:root'  # dev
+                - 'arn:aws:iam::318263296841:root'  # nonprod
+                - 'arn:aws:iam::563000599290:root'  # prod
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Image retention 1",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["prod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 2,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["nonprod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 3,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["dev"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }   
+
+  VendorPortalOrderProjectionDataLoadImageRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "vendorportal/orderprojection-dataload"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          # Reference to current account under the assumption of deployment to the
+          # artefact account
+          - Sid: CurrentAccountPush
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:PutImage'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:CompleteLayerUpload'
+          - Sid: AllowPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - 'arn:aws:iam::187628286232:root'  # dev
+                - 'arn:aws:iam::318263296841:root'  # nonprod
+                - 'arn:aws:iam::563000599290:root'  # prod
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Image retention 1",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["prod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 2,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["nonprod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 3,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["dev"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }
+  VendorPortalSupplierImageRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "vendorportal/supplier"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: CurrentAccountPush
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:PutImage'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:CompleteLayerUpload'
+          - Sid: AllowPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - 'arn:aws:iam::187628286232:root'  # dev
+                - 'arn:aws:iam::318263296841:root'  # nonprod
+                - 'arn:aws:iam::563000599290:root'  # prod
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Image retention 1",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["prod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 2,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["nonprod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 3,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["dev"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }
+  VendorPortalFactoryImageRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "vendorportal/factory"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          # Reference to current account under the assumption of deployment to the
+          # artefact account
+          - Sid: CurrentAccountPush
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:PutImage'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:CompleteLayerUpload'
+          - Sid: AllowPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - 'arn:aws:iam::187628286232:root'  # dev
+                - 'arn:aws:iam::318263296841:root'  # nonprod
+                - 'arn:aws:iam::563000599290:root'  # prod
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Image retention 1",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["prod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 2,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["nonprod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 3,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["dev"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }
+  VendorPortalProductComponentServiceImageRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: "vendorportal/product-component"
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          # Reference to current account under the assumption of deployment to the
+          # artefact account
+          - Sid: CurrentAccountPush
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:PutImage'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:UploadLayerPart'
+              - 'ecr:CompleteLayerUpload'
+          - Sid: AllowPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - 'arn:aws:iam::187628286232:root'  # dev
+                - 'arn:aws:iam::318263296841:root'  # nonprod
+                - 'arn:aws:iam::563000599290:root'  # prod
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Image retention 1",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["prod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 2,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["nonprod"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                },
+                {
+                  "rulePriority": 3,
+                  "description": "Image retention 2",
+                  "selection": {
+                    "tagStatus": "tagged",
+                    "tagPrefixList": ["dev"],
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 10
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }                                                                              
+Outputs:
+  VendorPortalReportingImageRepo:
+    Description: ECR Repo Name for reporting service
+    Value: !Ref VendorPortalReportingImageRepo
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalReportingImageRepo  
+
+  VendorPortalNodeAwsImageRepo:
+    Description: ECR Repo Name for spring docker Image
+    Value: !Ref VendorPortalNodeAwsImageRepo
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalNodeAwsImageRepo
+  VendorPortalNodeImageRepo:
+    Description: ECR Repo Name for node Image
+    Value: !Ref VendorPortalNodeImageRepo
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalNodeImageRepo
+  VendorPortalNodeTestImageRepo:
+    Description: ECR Repo Name for test node Image
+    Value: !Ref VendorPortalNodeTestImageRepo
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalNodeTestImageRepo          
+  VendorPortalFacadeImageRepo:
+    Description: ECR Repo Name for facade node Image
+    Value: !Ref VendorPortalFacadeImageRepo
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalFacadeImageRepo 
+  VendorPortalApiAuthImageRepo:
+    Description: ECR Repo Name for API auth node Image
+    Value: !Ref VendorPortalApiAuthImageRepo
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalApiAuthImageRepo   
+  VendorPortalProductServiceImageRepo:
+    Description: ECR Repo Name for product service
+    Value: !Ref VendorPortalProductServiceImageRepo
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalProductServiceImageRepo
+  VendorPortalOrderProjectionImageRepo:
+    Description: ECR Repo Name for Order Projection API
+    Value: !Ref VendorPortalOrderProjectionImageRepo
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalOrderProjectionImageRepo          
+  VendorPortalOsbMasterDataManagementServiceRepo:
+    Description: ECR Repo Name for osb master data managemnet API
+    Value: !Ref VendorPortalOsbMasterDataManagementServiceRepo
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalOsbMasterDataManagementServiceRepo  
+  VendorPortalAWSPythonSDKImageRepo:
+    Description: ECR Repo Name for python aws sdk
+    Value: !Ref VendorPortalAWSPythonSDKImageRepo
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalAWSPythonSDKImageRepo            
+  VendorPortalBaseNodejsImageRepo:     
+    Description: ECR Repo Name for base node js image
+    Value: !Ref VendorPortalBaseNodejsImageRepo
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalBaseNodejsImageRepo
+  VendorPortalBaseTestAutomationImageRepo:     
+    Description: ECR Repo Name for base Test automation image
+    Value: !Ref VendorPortalBaseTestAutomationImageRepo
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalBaseTestAutomationImageRepo      
+
+  VendorPortalTestAutomationImageRepo:     
+    Description: ECR Repo Name for base node js image
+    Value: !Ref VendorPortalTestAutomationImageRepo
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalTestAutomationImageRepo
+  VendorPortalStockOnHandImageRepo:
+    Description: ECR Repo Name for stock in hand service
+    Value: !Ref VendorPortalStockOnHandImageRepo
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalStockOnHandImageRepo
+  VendorPortalOtelImageRepo:
+    Description: ECR Repo Name for open telemetry collector service
+    Value: !Ref VendorPortalOtelImageRepo
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalOtelImageRepo   
+  VendorPortalSupplierImageRepo:
+    Description: ECR Repo Name for supplier onboarding service
+    Value: !Ref VendorPortalSupplierImageRepo
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalSupplierImageRepo 
+  VendorPortalFactoryImageRepo:
+    Description: ECR Repo Name for fatory onboarding service
+    Value: !Ref VendorPortalFactoryImageRepo
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalFactoryImageRepo   
+  VendorPortalProductComponentServiceImageRepo:
+    Description: ECR Repo Name for product component service
+    Value: !Ref VendorPortalProductComponentServiceImageRepo
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalProductComponentServiceImageRepo
+  VendorPortalCommitmentDataImageRepo:
+    Description: ECR Repo Name for committment data service
+    Value: !Ref VendorPortalCommitmentDataImageRepo
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalCommitmentDataImageRepo         
+  VendorPortalIdentityMgmtImageRepo:
+    Description: ECR Repo Name for identity service service
+    Value: !Ref VendorPortalIdentityMgmtImageRepo
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalIdentityMgmtImageRepo   
+  VendorPortalAppsOnboardingImageRepo:
+    Description: ECR Repo Name for apps onboarding service
+    Value: !Ref VendorPortalAppsOnboardingImageRepo
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalAppsOnboardingImageRepo
+  VendorPortalOrderComparisonImageRepo:
+    Description: ECR Repo Name for apps order comparison service
+    Value: !Ref VendorPortalOrderComparisonImageRepo
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalOrderComparisonImageRepo 
+  VendorPortalGmCommitmentDataImageRepo:
+    Description: ECR Repo Name for gm commitment data
+    Value: !Ref VendorPortalGmCommitmentDataImageRepo
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalGmCommitmentDataImageRepo
+  VendorPortalOpReconciliationImageRepo:
+    Description: ECR Repo Name for products order projection reconciliation
+    Value: !Ref VendorPortalOpReconciliationImageRepo
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalOpReconciliationImageRepo
+  VendorPortalSupplierRegistrationImageRepo:
+    Description: ECR Repo Name for supplier registration
+    Value: !Ref VendorPortalSupplierRegistrationImageRepo
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalSupplierRegistrationImageRepo
+  VendorPortalSupplierDssAdapterImageRepo:
+    Description: ECR Repo Name for supplier dss adapter registration
+    Value: !Ref VendorPortalSupplierDssAdapterImageRepo
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalSupplierDssAdapterImageRepo
+  VendorPortalOrderPollerImageRepo:
+    Description: ECR Repo Name for order poller
+    Value: !Ref VendorPortalOrderPollerImageRepo
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalOrderPollerImageRepo

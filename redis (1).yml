@@ -1,0 +1,209 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: This contains the ElastiCache deployment for cache storage
+
+Parameters:
+  RedisFlag:
+    Type: String
+    Default: false
+  OsbRedisUser:
+    Type: String
+    NoEcho: "true"
+    Default: test
+  OsbRedisPwd:
+    Type: String
+    NoEcho: "true"  
+    Default: test
+  VpAuthToken:
+    Type: String
+    NoEcho: "true"
+  SfrsRedisPwd:
+    Type: String
+    NoEcho: "true"
+    Default: test
+  SfrsRedisUserName:
+    Type: String
+    NoEcho: "true"
+    Default: test
+  RedisPort:
+    Type: Number
+    Default: 6379     
+  BillingTag:
+    Default: vendorportal
+    Type: String
+  OwnerTag:
+    Default: vendorportal
+    Type: String
+  ProjectTag:
+    Default: vendorportal
+    Type: String
+  Environment:
+    Default: dev
+    AllowedValues: [dev, prod, nonprod]
+    Type: String
+    ConstraintDescription: must specify prod, dev, or nonprod.
+  CacheNodeType:
+    Type: String
+    Default: cache.t3.small
+    AllowedValues:
+      - cache.t3.small
+      - cache.t3.medium
+      - cache.t4g.micro
+      - cache.t4g.small
+      - cache.t4g.medium
+  RedisReplicationGroupId:
+    Type: String
+    Default: vendorportal-default
+  NoOfShardsPerCluster:
+    Type: Number
+    Default: 1
+    MinValue: 1
+    MaxValue: 90
+  NoOfReplicasPerShard:
+    Type: Number
+    Default: 0
+    MinValue: 0
+    MaxValue: 5
+  ReplicationGroupDescription:
+    Type: String
+    Default: Redis For Vendorportal
+  RedisParameterGroupName:
+    Type: String
+  RedisEngineVersion:
+    Type: String     
+  VpcBaseStack:
+    Type: String
+    AllowedPattern: '[A-Za-z][A-Za-z0-9-]{0,127}'
+  SnsStack:
+    Type: String
+  SgStack:
+    Type: String
+  PreferredMaintenanceWindow:
+    Description: >-
+      The weekly time range during which system maintenance can occur. Use the
+      following format to specify a time range: ddd:hh24:mi-ddd:hh24:mi (24H
+      Clock UTC).
+    Type: String
+    Default: sun:22:00-sun:23:30
+    AllowedPattern: >-
+      (mon|tue|wed|thu|fri|sat|sun):\d{2}:\d{2}-(mon|tue|wed|thu|fri|sat|sun):\d{2}:\d{2}
+    ConstraintDescription: >-
+      must be a valid timestamp range with day of week, for example
+      sun:22:00-sun:23:30
+
+Conditions: 
+ IsProd:  !Equals [ !Ref Environment, prod ]
+ IsDeploy: !Equals [ !Ref RedisFlag , "true" ]
+
+Resources:
+  # VendorPortalRedisUserDefault:
+  #   Type: AWS::ElastiCache::User
+  #   Properties: 
+  #     AccessString: "off ~* +@all"
+  #     Engine: redis      
+  #     Passwords: 
+  #       - !Ref SfrsRedisPwd
+  #     #UserId: vendorportal-default
+  #     UserId: !Ref SfrsRedisUserName
+  #     UserName: default
+  # VendorPortalRedisUser:
+  #   Type: AWS::ElastiCache::User
+  #   Properties: 
+  #     AccessString: "on ~* +@all"
+  #     Engine: redis      
+  #     Passwords: 
+  #       - !Ref OsbRedisPwd
+  #     UserId: !Ref OsbRedisUser
+  #     UserName: vendorportal-user
+  # VendorPortalRedisUserGroup:
+  #   Type: AWS::ElastiCache::UserGroup
+  #   Properties: 
+  #     Engine: redis
+  #     UserGroupId: vendorportal-group
+  #     UserIds: 
+  #       - !Ref VendorPortalRedisUserDefault
+  #       - !Ref VendorPortalRedisUser
+  VendorPortalRedisSubnetGroup:
+    Condition: IsDeploy
+    Type: AWS::ElastiCache::SubnetGroup
+    Properties:
+      Description: Subnet Group for ElastiCache (Redis)
+      SubnetIds:
+        - Fn::ImportValue: !Sub ${VpcBaseStack}::SubnetIdDataAz1
+        - Fn::ImportValue: !Sub ${VpcBaseStack}::SubnetIdDataAz2
+        - Fn::ImportValue: !Sub ${VpcBaseStack}::SubnetIdDataAz3
+
+  VendorPortalRedisReplicationGroup:
+    Condition: IsDeploy
+    Type: AWS::ElastiCache::ReplicationGroup
+    Properties:
+      AuthToken: !Ref VpAuthToken
+      AtRestEncryptionEnabled: true      
+      AutomaticFailoverEnabled: true
+      CacheNodeType: !Ref CacheNodeType
+      CacheParameterGroupName: !Ref RedisParameterGroupName
+      CacheSubnetGroupName: !Ref VendorPortalRedisSubnetGroup
+      Engine: redis
+      EngineVersion: !Ref RedisEngineVersion
+      NumNodeGroups: !Ref NoOfShardsPerCluster
+      Port: !Ref RedisPort
+      ReplicasPerNodeGroup: !Ref NoOfReplicasPerShard
+      PreferredMaintenanceWindow: !Ref PreferredMaintenanceWindow
+      NotificationTopicArn:
+        Fn::ImportValue: !Sub ${SnsStack}::PlatformNotificationTopic      
+      ReplicationGroupDescription: !Ref ReplicationGroupDescription
+      TransitEncryptionEnabled: true
+      SecurityGroupIds:
+        - Fn::ImportValue: !Sub ${SgStack}::VendorPortalRedisSecurityGroup
+        - !If [ IsProd , !Ref AWS::NoValue , Fn::ImportValue: !Sub "${SgStack}::VendorPortalRedisDeveloperSecurityGroup" ]
+
+        
+      # UserGroupIds:
+      #   - !Ref VendorPortalRedisUserGroup
+      Tags:
+          - Key: Name
+            Value: !Sub ${AWS::StackName}-ReplicationGroup-${Environment}
+          - Key: Billing
+            Value: !Ref BillingTag
+          - Key: Environment
+            Value: !Ref Environment        
+          - Key: Owner
+            Value: !Ref OwnerTag
+          - Key: Project
+            Value: !Ref ProjectTag
+  VendorPortalRedisEndpointSSM:
+    Condition: IsDeploy
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /${ProjectTag}/redis_endpoint
+      Type: String
+      Value: !GetAtt VendorPortalRedisReplicationGroup.ConfigurationEndPoint.Address
+      Description: Stores the redis endpoint      
+      Tags:
+        Name: !Sub ${AWS::StackName}-endpoint
+        Billinge: !Sub ${BillingTag}
+        Environment: !Sub ${Environment}
+        Owner: !Sub ${OwnerTag}
+        Project: !Sub ${ProjectTag}
+  VendorPortalRedisPortSSM:
+    Condition: IsDeploy
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /${ProjectTag}/redis_port
+      Type: String
+      Value: !GetAtt VendorPortalRedisReplicationGroup.ConfigurationEndPoint.Port
+      Description: Stores the redis port      
+      Tags:
+        Name: !Sub ${AWS::StackName}-port
+        Billinge: !Sub ${BillingTag}
+        Environment: !Sub ${Environment}
+        Owner: !Sub ${OwnerTag}
+        Project: !Sub ${ProjectTag}         
+
+Outputs:
+  RedisReplicationGroup:
+    Condition: IsDeploy
+    Description: A reference to redis replication group
+    Value: !Ref VendorPortalRedisReplicationGroup
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalRedisReplicationGroup

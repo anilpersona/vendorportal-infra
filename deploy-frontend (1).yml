@@ -1,0 +1,610 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+Description:  Deploy Vendor Portal Frontend components
+
+Parameters:
+  CWLogsRetentionPeriod:
+    Type: Number
+    Default: 7
+  SumoLogShipperLambdaArn:
+    Type: String
+    Default: 'test'
+  FileStorePublicKey:
+    Type: String
+    Description: Public key for filestore
+  LambdaPackageName:
+    Type: String
+    Description: Lambda package name
+    Default: test
+  CfCacheInvalidLambdaS3Key:
+    Type: String
+    Description: Lambda package s3 key
+  PutLatestToolLambdaS3Key:
+    Type: String
+    Description: Lambda package s3 key    
+  ApiCustomHeader:    
+    Type: String
+    NoEcho: "true"
+    Default: test
+  BillingTag:
+    Default: "vendorportal"
+    Type: "String"
+  OwnerTag:
+    Default: "vendorportal"
+    Type: "String"
+  ProjectTag:
+    Default: "vendorportal"
+    Type: "String"
+  Environment:
+    Default: "dev"
+    AllowedValues: [dev, prod, nonprod]
+    Type: "String"
+  CacheInvalidatorLamdaRoleArn:
+    Description: SSM Parameter containing CacheInvalidator lambda role arn       
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Default: /aws/service/ecs/optimized-ami/amazon-linux-2/recommended/image_id
+  OriginRequestLamdaArn:
+    Description: SSM Parameter containing OriginRequest lambda arn with version
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Default: /vendorportal/arn/vendorportal-edge-origin-request-lambda
+  OriginResponseLamdaArn:
+    Description: SSM Parameter containing OriginResponse lambda arn with version  
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Default: /vendorportal/arn/vendorportal-edge-origin-response
+  AcmPortalSSLCertificateArn:
+    Type: String
+  CFFQDN:
+    Type: String
+  ApiOriginPath:
+    Type: String
+  WebACLID:
+    Description: SSM Parameter containing webacl id
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Default: /vendorportal/webaclarn
+  S3Stack:
+    Type: String
+  IamStack:
+    Type: String
+  # EdgeLambdaArn:
+  #   Type: String
+  # ResponseEdgeLambdaArn:
+  #   Type: String
+
+Conditions: 
+  IsProd: !Equals [ !Ref Environment, "prod" ]
+  IsNonProd: !Equals [ !Ref Environment, "nonprod" ]
+  IsDev: !Equals [ !Ref Environment, "dev" ]
+  IsSumoLogShipperLambdaArn: !Not [!Equals [ !Ref SumoLogShipperLambdaArn, "" ]]
+
+Resources:
+  VendorPortalPutLatestToolLogGroup:
+    Type: "AWS::Logs::LogGroup"
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${VendorPortalPutLatestToolLambda}"
+      RetentionInDays: !Ref CWLogsRetentionPeriod
+  VendorPortalPutLatestToolSumoCWLogSubsriptionFilter:
+    Type: AWS::Logs::SubscriptionFilter
+    Condition: IsSumoLogShipperLambdaArn
+    Properties:
+      LogGroupName: !Ref VendorPortalPutLatestToolLogGroup        
+      DestinationArn: !Ref SumoLogShipperLambdaArn           
+      FilterPattern: ''
+  VendorPortalCFCacheInvalidatorLogGroup:
+    Type: "AWS::Logs::LogGroup"
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${VendorPortalCFCacheInvalidatorLambda}"
+      RetentionInDays: !Ref CWLogsRetentionPeriod
+  VendorPortalCFCacheInvalidatorSumoCWLogSubsriptionFilter:
+    Type: AWS::Logs::SubscriptionFilter
+    Condition: IsSumoLogShipperLambdaArn
+    Properties:
+      LogGroupName: !Ref VendorPortalCFCacheInvalidatorLogGroup        
+      DestinationArn: !Ref SumoLogShipperLambdaArn           
+      FilterPattern: ''
+  VendorPortalFrontendFacadeBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-s3-frontend-${Environment}"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag
+      MetricsConfigurations:
+        - Id: EntireBucket
+      # WebsiteConfiguration:
+      #   IndexDocument: index.html
+      #   ErrorDocument: index.html
+      BucketName: !Sub 'kmartau-vendorportal-frontend-${Environment}'
+      VersioningConfiguration:
+        Status: "Enabled"
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Function: !GetAtt VendorPortalCFCacheInvalidatorLambda.Arn
+            Event: s3:ObjectCreated:Put
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: index.html
+          - Function: !GetAtt VendorPortalPutLatestToolLambda.Arn
+            Event: s3:ObjectCreated:Put
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix 
+                    Value: ".exe"
+          - Function: !GetAtt VendorPortalPutLatestToolLambda.Arn
+            Event: s3:ObjectCreated:Put
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix 
+                    Value: ".dmg"                                                            
+  VendorPortalFrontEndS3Bucketpolicy:
+    Type: "AWS::S3::BucketPolicy"
+    Properties:
+      Bucket: !Ref VendorPortalFrontendFacadeBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - !If #project-admin read access
+            - IsDev
+            - !Ref AWS::NoValue
+            - Sid: AllowRead
+              Effect: Deny
+              NotAction:
+                - 's3:List*'
+                - 's3:GetBucketPolicy'
+                - 's3:GetAccountPublicAccessBlock'
+                - 's3:GetBucketObjectOwnership'
+                - 's3:GetBucketAcl'
+                - 's3:GetBucketCORS'               
+              Resource:
+                - !GetAtt VendorPortalFrontendFacadeBucket.Arn
+                - !Sub "${VendorPortalFrontendFacadeBucket.Arn}/*"
+              Principal:
+                AWS: '*'
+              Condition:
+                ArnEquals:
+                  'aws:PrincipalArn':
+                    - !Sub 'arn:aws:iam::${AWS::AccountId}:role/ADFS-${Environment}-vendorportal-global-admin'                     
+          - Sid: DenyDeleteBucket
+            Effect: Deny
+            Action: 's3:DeleteBucket'
+            Resource:
+              - !GetAtt VendorPortalFrontendFacadeBucket.Arn
+            Principal:
+              AWS: '*'         
+          - Sid: SecureOnly
+            Effect: Deny
+            Action: 's3:*'
+            Resource:
+              - !GetAtt VendorPortalFrontendFacadeBucket.Arn
+              - !Sub "${VendorPortalFrontendFacadeBucket.Arn}/*"
+            Principal:
+              AWS: '*'
+            Condition:
+              Bool:
+                'aws:SecureTransport': 'false'
+          - Sid: DenyUnencryptedPuts
+            Effect: Deny
+            Action: 's3:PutObject'
+            Resource: !Sub "${VendorPortalFrontendFacadeBucket.Arn}/*"
+            Principal:
+              AWS: '*'
+            Condition:
+              'Null':
+                's3:x-amz-server-side-encryption': 'true'
+          - Sid: DenyAccessToAllExceptAllowedArns
+            Effect: Deny
+            Principal:
+              AWS: "*"
+            Action: 's3:*'
+            Resource:
+              - !GetAtt VendorPortalFrontendFacadeBucket.Arn
+              - !Sub "${VendorPortalFrontendFacadeBucket.Arn}/*"
+            Condition:
+              ArnNotEquals:
+                'aws:PrincipalArn':
+                  - !Sub 'arn:aws:iam::${AWS::AccountId}:role/infra-cfnrole-vendorportal-nonprivileged'                
+                  - !Sub 'arn:aws:iam::${AWS::AccountId}:role/ADFS-${Environment}-vendorportal-global-admin'
+                  - !Sub 'arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity ${VendorPortalCFOriginAccessId}'
+
+          - !If # Restricted Admin access for nonprod and prod
+            - IsDev
+            - !Ref AWS::NoValue                     
+            - Sid: AllowRestrictedAdmin
+              Effect: Deny
+              NotAction:
+                - 's3:ListBucketVersions'
+                - 's3:ListObjectVersions'
+                - 's3:GetObject'
+                - 's3:PutObject'
+                - 's3:ListBucket'
+                - 's3:DeleteObjectVersion'
+                - 's3:DeleteObject'
+                - 's3:PutReplicationConfiguration'
+                - 's3:PutObjectVersionAcl'
+                - 's3:PutObjectRetention'
+                - 's3:PutObjectLegalHold'
+                - 's3:PutObjectAcl'
+                - 's3:PutMetricsConfiguration'
+                - 's3:PutLifecycleConfiguration'
+                - 's3:PutInventoryConfiguration'
+                - 's3:PutEncryptionConfiguration'
+                - 's3:PutBucketWebsite'
+                - 's3:PutBucketVersioning'
+                - 's3:PutBucketTagging'
+                - 's3:PutBucketRequestPayment'
+                - 's3:PutBucketPublicAccessBlock'
+                - 's3:PutBucketPolicy'
+                - 's3:PutBucketObjectLockConfiguration'
+                - 's3:PutBucketNotification'
+                - 's3:PutBucketLogging'
+                - 's3:PutBucketCORS'
+                - 's3:PutBucketAcl'
+                - 's3:PutAnalyticsConfiguration'
+                - 's3:PutAccelerateConfiguration'
+                - 's3:DeleteBucketWebsite'
+                - 's3:DeleteBucketPolicy'
+                - 's3:BypassGovernanceRetention'
+              Resource:
+                - !GetAtt VendorPortalFrontendFacadeBucket.Arn
+                - !Sub "${VendorPortalFrontendFacadeBucket.Arn}/*"
+              Principal:
+                AWS: '*'
+              Condition:
+                ArnEquals:
+                  'aws:PrincipalArn':
+                    - !Sub 'arn:aws:iam::${AWS::AccountId}:role/infra-cfnrole-vendorportal-nonprivileged'                    
+                      
+          - Sid: AllowCloudFrontAccess
+            Effect: Allow
+            Action:
+              - 's3:GetObject'
+              - 's3:ListBucket'
+            Resource:
+              - !GetAtt VendorPortalFrontendFacadeBucket.Arn
+              - !Sub "${VendorPortalFrontendFacadeBucket.Arn}/*"                
+            Principal:
+              AWS: '*'
+            Condition:
+              ArnEquals:
+                'aws:PrincipalArn': 
+                  - !Sub 'arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity ${VendorPortalCFOriginAccessId}'
+          - Sid: DenyCloudFrontAccess
+            Effect: Deny
+            Action:
+              - 's3:GetObject'
+            NotResource:
+              - !Sub "${VendorPortalFrontendFacadeBucket.Arn}/apps/*"
+              - !Sub "${VendorPortalFrontendFacadeBucket.Arn}/int/*"               
+              - !Sub "${VendorPortalFrontendFacadeBucket.Arn}/ext/*"
+              - !Sub "${VendorPortalFrontendFacadeBucket.Arn}/adminstore/*"
+              - !Sub "${VendorPortalFrontendFacadeBucket.Arn}/sfrs/*"
+              - !Sub "${VendorPortalFrontendFacadeBucket.Arn}/app-cards/*"
+            Principal:
+              AWS: '*'
+            Condition:
+              ArnEquals:
+                'aws:PrincipalArn': 
+                  - !Sub 'arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity ${VendorPortalCFOriginAccessId}'                                                      
+     
+  VendorPortalCFCacheInvalidatorLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref VendorPortalCFCacheInvalidatorLambda
+      Principal: s3.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub 'arn:aws:s3:::kmartau-vendorportal-frontend-${Environment}'
+  VendorPortalCFCacheInvalidatorLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub vendorportal-cloudfront-cache-invalidator-${Environment}
+      Role:
+        Fn::ImportValue: !Sub ${IamStack}::VendorPortalCFCacheInvalidatorLambdaRoleARN
+      Handler: lambda_function.handler
+      Runtime: python3.7
+      Timeout: 10
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-lambda-${Environment}"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag
+      Code:
+        S3Bucket:
+          Fn::ImportValue: !Sub ${S3Stack}::VendorPortalArtifactBucketName
+        S3Key: !Sub "${CfCacheInvalidLambdaS3Key}/${LambdaPackageName}.zip"
+  VendorPortalPutLatestToolLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref VendorPortalPutLatestToolLambda
+      Principal: s3.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub 'arn:aws:s3:::kmartau-vendorportal-frontend-${Environment}'
+  VendorPortalPutLatestToolLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Environment:
+        Variables: 
+          WIN_LATEST_ADMIN_TOOL_SSM : !Sub "/${ProjectTag}/windows/latest/admin_tool_name"
+          MAC_LATEST_ADMIN_TOOL_SSM : !Sub "/${ProjectTag}/mac/latest/admin_tool_name"
+          AWS_ENV: !Ref Environment
+      FunctionName: !Sub vendorportal-get-latest-admin-tool-${Environment}
+      Role:
+        Fn::ImportValue: !Sub ${IamStack}::VendorPortalPutLatestToolLambdaRoleARN
+      Handler: lambda_function.handler
+      Runtime: python3.7
+      Timeout: 10
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-get-latest-admin-tool-${Environment}"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag
+      Code:
+        S3Bucket:
+          Fn::ImportValue: !Sub ${S3Stack}::VendorPortalArtifactBucketName
+        S3Key: !Sub "${PutLatestToolLambdaS3Key}/${LambdaPackageName}.zip"        
+               
+     
+  VendorPortalCachePolicy:
+    Type: AWS::CloudFront::CachePolicy
+    Properties: 
+      CachePolicyConfig:
+        Comment: Policy for vendor portal
+        DefaultTTL: 2592000 # 30days 86400=1day
+        MaxTTL: 31536000 # 1 year
+        MinTTL: 2592000 # 30 days 1
+        Name: Vendorportal-default-policy
+        ParametersInCacheKeyAndForwardedToOrigin: 
+          CookiesConfig: 
+            CookieBehavior: none
+          EnableAcceptEncodingBrotli: true
+          EnableAcceptEncodingGzip: true
+          HeadersConfig: 
+            HeaderBehavior: none
+          QueryStringsConfig: 
+            QueryStringBehavior: none
+  VendorPortalFileStoreCachePolicy:
+    Type: AWS::CloudFront::CachePolicy
+    Properties: 
+      CachePolicyConfig:
+        Comment: Policy for vendor portal file stores
+        DefaultTTL: 0
+        MaxTTL: 1
+        MinTTL: 0
+        Name: Vendorportal-file-store-cache-policy
+        ParametersInCacheKeyAndForwardedToOrigin: 
+          CookiesConfig: 
+            CookieBehavior: none
+          EnableAcceptEncodingBrotli: true
+          EnableAcceptEncodingGzip: true
+          HeadersConfig: 
+            HeaderBehavior: none            
+          QueryStringsConfig: 
+            QueryStringBehavior: none
+  VendorPortalFileStoreRequestPolicy:
+    Type: AWS::CloudFront::OriginRequestPolicy
+    Properties: 
+      OriginRequestPolicyConfig: 
+        Name: vendorportal-file-store-request-policy
+        Comment: vendorportal file store request policy
+        CookiesConfig: 
+          CookieBehavior: none
+        HeadersConfig: 
+          HeaderBehavior: none      
+        QueryStringsConfig: 
+          QueryStringBehavior: none                           
+  VendorPortalAPICachePolicy:
+    Type: AWS::CloudFront::CachePolicy
+    Properties: 
+      CachePolicyConfig:
+        Comment: Policy for vendor portal api origin
+        DefaultTTL: 0
+        MaxTTL: 1
+        MinTTL: 0
+        Name: Vendorportal-api-cache-policy
+        ParametersInCacheKeyAndForwardedToOrigin: 
+          CookiesConfig: 
+            CookieBehavior: all
+          EnableAcceptEncodingBrotli: true
+          EnableAcceptEncodingGzip: true
+          HeadersConfig: 
+            HeaderBehavior: whitelist
+            Headers: 
+              - Authorization            
+              - Host
+              - Content-Type
+          QueryStringsConfig: 
+            QueryStringBehavior: all              
+  VendorPortalAPIOriginRequestPolicy:
+    Type: AWS::CloudFront::OriginRequestPolicy
+    Properties: 
+      OriginRequestPolicyConfig: 
+        Name: vendorportal-api-origin-request-policy
+        Comment: vendorportal api origin request policy
+        CookiesConfig: 
+          CookieBehavior: all
+        HeadersConfig: 
+          HeaderBehavior: none
+          # HeaderBehavior: whitelist
+          # Headers: 
+          #   - Host         
+        QueryStringsConfig: 
+          QueryStringBehavior: all
+                         
+  VendorPortalCFOriginAccessId:
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: !Ref VendorPortalFrontendFacadeBucket
+  
+  VendorPortalCFPrimaryDistribution:
+    Type: "AWS::CloudFront::Distribution"
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-cf-distribution-${Environment}"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag
+      DistributionConfig:
+        Enabled: true
+        Aliases: 
+        - !Ref CFFQDN
+          #- !If [ IsDev , !Ref CFFQDN , !Ref AWS::NoValue]
+          
+        Comment: !Sub Vendorportal Portal - Frontend CloudFront Distribution for ${AWS::Region}"
+        DefaultCacheBehavior:
+          AllowedMethods:
+            - GET
+            - HEAD
+            - POST
+            - PUT
+            - DELETE
+            - OPTIONS
+            - PATCH          
+          TargetOriginId: s3origin
+          ViewerProtocolPolicy: "https-only"
+          LambdaFunctionAssociations:
+            - EventType: "origin-request"
+              LambdaFunctionARN: !Ref OriginRequestLamdaArn
+          CachePolicyId: !Ref VendorPortalCachePolicy
+          Compress: true
+        CacheBehaviors:                
+          - AllowedMethods:
+            - GET
+            - HEAD
+            - POST
+            - PUT
+            - DELETE
+            - OPTIONS
+            - PATCH
+            TargetOriginId: "ApiOrigin"
+            ViewerProtocolPolicy: "https-only"
+            LambdaFunctionAssociations:
+              - EventType: "origin-response"
+                LambdaFunctionARN: !Ref OriginResponseLamdaArn
+            # ForwardedValues:
+            #   QueryString: true
+            #   Cookies:
+            #     Forward: all
+            #   Headers: 
+            #     - Authorization
+            #     - Host
+            #     - Content-Type
+            PathPattern: "/api/*" 
+            CachePolicyId: !Ref VendorPortalAPICachePolicy
+            OriginRequestPolicyId: !Ref VendorPortalAPIOriginRequestPolicy
+          - AllowedMethods:
+            - GET
+            - HEAD
+            TargetOriginId: s3origin
+            ViewerProtocolPolicy: https-only
+            PathPattern: "/adminstore/*" 
+            CachePolicyId: !Ref VendorPortalFileStoreCachePolicy
+            OriginRequestPolicyId: !Ref VendorPortalFileStoreRequestPolicy
+            TrustedKeyGroups: 
+              - !Ref VendorPortalCfKeyGroup
+        HttpVersion: http2
+        Logging:
+          Bucket: !Join
+                    - ''
+                    - - Fn::ImportValue: !Sub "${S3Stack}::VendorPortalLogBucketName"
+                      - '.s3.amazonaws.com'
+          IncludeCookies: false 
+          Prefix: 'cf-logs/'
+        IPV6Enabled: false
+        Origins:
+          #- DomainName: !GetAtt 'VendorPortalFrontendFacadeBucket.DomainName'
+          - DomainName: !Sub 'kmartau-vendorportal-frontend-${Environment}.s3.ap-southeast-2.amazonaws.com'          
+            Id: s3origin
+            S3OriginConfig:
+              OriginAccessIdentity: !Sub 'origin-access-identity/cloudfront/${VendorPortalCFOriginAccessId}'
+          - DomainName: !Ref ApiOriginPath
+            Id: ApiOrigin            
+            CustomOriginConfig:              
+              HTTPSPort: 443
+              OriginProtocolPolicy: https-only
+              OriginReadTimeout: 60
+              OriginSSLProtocols: 
+                - "TLSv1.2"              
+            OriginCustomHeaders:
+            - HeaderName: 'X-Forwarded-Host'
+              HeaderValue: !Ref CFFQDN
+            - HeaderName: 'X-Custom-Osb'
+              HeaderValue: !Ref ApiCustomHeader                                         
+        DefaultRootObject: "apps/index.html"
+        PriceClass: PriceClass_All
+        ViewerCertificate:
+          SslSupportMethod: sni-only
+          AcmCertificateArn: !Ref AcmPortalSSLCertificateArn
+          MinimumProtocolVersion: TLSv1.2_2019
+        WebACLId: !Ref WebACLID
+  VendorPortalFileStorePublicKey:
+    Type: AWS::CloudFront::PublicKey
+    Properties:
+      PublicKeyConfig:
+        CallerReference: !Sub '${ProjectTag}-${Environment}'
+        Comment: 'Vendorportal Public key for filestore signed url'
+        Name: 'vendorportal-filestore-pubkey'
+        EncodedKey: !Sub "${FileStorePublicKey}"
+  VendorPortalPublicKeyIdSsm:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${ProjectTag}/cf_public_key_id"
+      Type: String
+      Value: !Ref VendorPortalFileStorePublicKey
+      Description: SSM Parameter stores CF public key id    
+      Tags:
+        Name: !Sub "${AWS::StackName}-ssm-param-cf-public-key-id"
+        Billinge: !Sub "${BillingTag} "
+        Environment: !Sub "${Environment} "        
+        Owner: !Sub "${OwnerTag} "
+        Project: !Sub "${ProjectTag} "        
+  VendorPortalCfKeyGroup:
+    Type: AWS::CloudFront::KeyGroup
+    Properties: 
+      KeyGroupConfig: 
+        Comment: !Sub "${ProjectTag}-Keygroup-${Environment}"
+        Items: 
+          - !Ref VendorPortalFileStorePublicKey
+        Name: !Sub "${ProjectTag}-Keygroup-${Environment}"        
+Outputs:
+  VendorPortalFrontendFacadeBucket:
+    Description: "vendorportal S3 bucket"
+    # yamllint disable-line rule:line-length
+    Value: VendorPortalFrontendFacadeBucket
+    Export:
+      Name: !Sub "${AWS::StackName}::VendorPortalFrontendFacadeBucket"
+
+  vendorportalCloudfront:
+    Description: "vendorportal Cloudfront"    
+    Value: !Ref VendorPortalCFPrimaryDistribution
+    Export:
+      Name: !Sub "${AWS::StackName}::vendorportalCloudfront"

@@ -1,0 +1,369 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Configure WAF and SG at Public ALB
+Parameters:
+  CWLogsRetentionPeriod:
+    Type: Number
+    Default: 7
+  SumoLogShipperLambdaArn:
+    Type: String
+    Default: 'test'
+  LogBucketPrefix:
+    Type: "String"
+    Default: "kmartau-vendorportal-logs"
+    Description: Log bucket name  
+  AlbStack:
+    Type: String
+  WAFScope:
+    Type: String
+    Description: Enables xray tracing on lambda
+    AllowedValues: ["CLOUDFRONT", "REGIONAL"]
+    Default: "REGIONAL"  
+  EnableXrayAlbSgUpdateLambda:
+    Type: String
+    Description: Enables xray tracing on lambda
+    AllowedValues: ["true", "false"]
+    Default: "false"
+  SchedulerState:
+    Type: String
+    AllowedValues: [DISABLED, ENABLED] 
+    Description: Sate of Scheduler
+    Default: DISABLED
+  IpUpdateCron:
+    Type: String
+    Description: Schedule update Ips for CDN
+  LambdaPackageName:
+    Type: String
+    Description: Lambda package name
+    Default: test
+  AlbSgUpdateLambdaS3Key:
+    Type: String
+    Description: Lambda package s3 key
+  IPChangeSnsArn:
+    Type: String
+    Default: "arn:aws:sns:us-east-1:806199016981:AmazonIpSpaceChanged"
+  BillingTag:
+    Default: "vendorportal"
+    Type: "String"
+  OwnerTag:
+    Default: "vendorportal"
+    Type: "String"
+  ProjectTag:
+    Default: "vendorportal"
+    Type: "String"
+  Environment:
+    Default: "dev"
+    AllowedValues: [dev, prod, nonprod]
+    Type: "String"
+  SgStack:
+    Description: StackName without the component name
+    Type: String     
+  S3Stack:
+    Description: StackName without the component name
+    Type: String
+  VpcBaseStack:
+    Type: String
+    AllowedPattern: '[A-Za-z][A-Za-z0-9-]{0,127}'  
+Conditions: 
+  IsProd: !Equals [ !Ref Environment, "prod" ]
+  IsNonProd: !Equals [ !Ref Environment, "nonprod" ]
+  IsDev: !Equals [ !Ref Environment, "dev" ]
+  EnableXrayAlbSgUpdateLambda: !Equals [ "true", !Ref EnableXrayAlbSgUpdateLambda ]
+  IsSumoLogShipperLambdaArn: !Not [!Equals [ !Ref SumoLogShipperLambdaArn, "" ]]  
+
+Resources:
+  VendorPortalAlbSgUpdateLogGroup:
+    Type: "AWS::Logs::LogGroup"
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/vendorportal-alb-sg-update-${Environment}"
+      RetentionInDays: !Ref CWLogsRetentionPeriod
+  VendorPortalAlbSgUpdateSumoCWLogSubsriptionFilter:
+    Type: AWS::Logs::SubscriptionFilter
+    Condition: IsSumoLogShipperLambdaArn
+    Properties:
+      LogGroupName: !Ref VendorPortalAlbSgUpdateLogGroup        
+      DestinationArn: !Ref SumoLogShipperLambdaArn           
+      FilterPattern: '' 
+  VendorPortalAlbSgUpdateLambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-iam-role-alb-sg-update"
+        - Key: Billing
+          Value: !Sub "${BillingTag}"
+        - Key: Environment
+          Value: !Sub "${Environment}"        
+        - Key: Owner
+          Value: !Sub "${OwnerTag}"
+        - Key: Project
+          Value: !Sub "${ProjectTag}"
+      Path: "/"
+      Policies:
+        - PolicyName: "log-usage-policy"
+          PolicyDocument:
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream                  
+                  - logs:PutLogEvents
+                Resource: "arn:aws:logs:*:*:*"
+        - PolicyName: "EC2Permissions"
+          PolicyDocument:
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - ec2:DescribeManagedPrefixLists
+                  - ec2:ModifyManagedPrefixList
+                  - ec2:GetManagedPrefixListEntries
+                  - ec2:RestoreManagedPrefixListVersion
+                  - ec2:GetManagedPrefixListAssociations
+                Resource: "*"
+        - !If 
+          - EnableXrayAlbSgUpdateLambda
+          - PolicyName: "xray-permissions"
+            PolicyDocument:
+              Statement:
+                - Effect: "Allow"
+                  Action:                  
+                    - xray:PutTraceSegments
+                    - xray:PutTelemetryRecords
+                  Resource: "*"
+          - !Ref AWS::NoValue                
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [lambda.amazonaws.com]
+            Action: ['sts:AssumeRole']
+  VendorPortalAlbSgUpdateLambdaInvokePermissionSns:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref VendorPortalAlbSgUpdateLambda
+      Principal: sns.amazonaws.com      
+      SourceArn: !Ref IPChangeSnsArn
+  VendorPortalCdnIpUpdateRule:    
+    Type: 'AWS::Events::Rule'
+    Properties:
+      Description: 'Cronjob to run lambda to update CDN IPs(Cloudfront)'
+      ScheduleExpression: !Ref IpUpdateCron
+      State: !Ref SchedulerState
+      Targets:        
+        - Arn: !GetAtt 'VendorPortalAlbSgUpdateLambda.Arn'
+          Id: alb-sg-update-lambda
+  VendorPortalAlbSgUpdateLambdaInvokePermissionCron:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref VendorPortalAlbSgUpdateLambda
+      Principal: events.amazonaws.com      
+      SourceArn: !GetAtt VendorPortalCdnIpUpdateRule.Arn
+  VendorPortalAlbSgUpdateLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub vendorportal-alb-sg-update-${Environment}
+      Role: !GetAtt VendorPortalAlbSgUpdateLambdaRole.Arn   
+      Handler: lambda_function.handler
+      Runtime: python3.7
+      TracingConfig:
+        Mode: 
+          !If 
+            - EnableXrayAlbSgUpdateLambda        
+            - Active
+            - !Ref AWS::NoValue      
+      Timeout: 60
+      Environment:
+        Variables:
+          PREFIX_LIST_ID:             
+            Fn::ImportValue: !Sub ${SgStack}::VendorPortalCFIpPrefixList          
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-lambda-${Environment}"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag
+      Code:
+        S3Bucket:
+          Fn::ImportValue: !Sub ${S3Stack}::VendorPortalArtifactBucketName
+        S3Key: !Sub "${AlbSgUpdateLambdaS3Key}/${LambdaPackageName}.zip"
+  VendorPortalAlbWafAssociation:
+    Type: AWS::WAFv2::WebACLAssociation
+    Properties: 
+      ResourceArn: 
+        Fn::ImportValue: !Sub "${AlbStack}::VendorPortalPublicALB"
+      WebACLArn: !GetAtt  VendorPortalAlbWaf.Arn
+  VendorPortalAlbWaf:
+    Type: AWS::WAFv2::WebACL
+    Properties: 
+      Name: !Sub "${AWS::StackName}-AlbWaf"
+      Description: "Vendorportal webacl"
+      DefaultAction:
+        Allow: {}
+      Scope: !Ref WAFScope
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-waf-alb"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag
+      VisibilityConfig: 
+        CloudWatchMetricsEnabled: true
+        MetricName: !Join [ '', [   !Join [ '', !Split [ '-', !Sub '${AWS::StackName}' ]], AlbWaf]]
+        SampledRequestsEnabled: true
+      Rules:
+        - Name: AWS-AWSManagedRulesKnownBadInputsRuleSet
+          Priority: 0
+          OverrideAction:
+            None: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Join [ '', [   !Join [ '', !Split [ '-', !Sub '${AWS::StackName}' ]], AWSManagedRulesKnownBadInputsRuleSet]]
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesKnownBadInputsRuleSet
+        - Name: AWS-AWSManagedRulesAnonymousIpList
+          Priority: 1
+          OverrideAction:
+            None: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Join [ '', [   !Join [ '', !Split [ '-', !Sub '${AWS::StackName}' ]], AWSManagedRulesAnonymousIpList]]
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesAnonymousIpList    
+              ExcludedRules:
+                - Name: HostingProviderIPList
+  VendorPortalAlbWafDeliveryStream:
+    DependsOn:
+      - VendorportalFirehoseDeliveryPolicy
+    Type: AWS::KinesisFirehose::DeliveryStream
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-kinesisfirehose-deliverystream-albwaf"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag
+      DeliveryStreamType: 'DirectPut'
+      DeliveryStreamName: !Sub aws-waf-logs-${ProjectTag}-alb
+      S3DestinationConfiguration :
+        BucketARN: !Join 
+          - ''
+          - - 'arn:aws:s3:::'
+            - !Sub "${LogBucketPrefix}-${Environment}"
+        BufferingHints:
+          IntervalInSeconds: 100
+          SizeInMBs: 50
+        CompressionFormat: GZIP
+        Prefix: firehose-waf-alb/
+        RoleARN: !GetAtt VendorportalFirehoseDeliveryRole.Arn
+        # EncryptionConfiguration:
+        #   KMSEncryptionConfig: 
+        #     AWSKMSKeyARN: !Sub 'arn:aws:kms:ap-southeast-2:${AWS::AccountId}:key/9acd438b-d605-4e9b-bbe7-cb57ab581eca'      
+  VendorportalFirehoseDeliveryRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-iam-role-firehose-wafalb"
+        - Key: Billing
+          Value: !Sub "${BillingTag}"
+        - Key: Environment
+          Value: !Sub "${Environment}"        
+        - Key: Owner
+          Value: !Sub "${OwnerTag}"
+        - Key: Project
+          Value: !Sub "${ProjectTag}"
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: ''
+            Effect: Allow
+            Principal:
+              Service: firehose.amazonaws.com
+            Action: 'sts:AssumeRole'
+            Condition:
+              StringEquals:
+                'sts:ExternalId': !Ref 'AWS::AccountId'
+  VendorportalFirehoseDeliveryPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: firehose_delivery_policy_vendorportal_waf_alb
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - 's3:AbortMultipartUpload'
+              - 's3:GetBucketLocation'
+              - 's3:GetObject'
+              - 's3:ListBucket'
+              - 's3:ListBucketMultipartUploads'
+              - 's3:PutObject'
+            Resource:
+              - !Join 
+                - ''
+                - - 'arn:aws:s3:::'
+                  - !Sub "${LogBucketPrefix}-${Environment}"
+              - !Join 
+                - ''
+                - - 'arn:aws:s3:::'
+                  - !Sub "${LogBucketPrefix}-${Environment}"
+                  - '*'
+      Roles:
+        - !Ref VendorportalFirehoseDeliveryRole
+  VendorPortalAlbWafLoggingConfiguration:
+    Type: AWS::WAFv2::LoggingConfiguration
+    Properties:
+      ResourceArn: !GetAtt VendorPortalAlbWaf.Arn
+      LogDestinationConfigs: 
+        - !GetAtt VendorPortalAlbWafDeliveryStream.Arn
+      RedactedFields: 
+        - SingleHeader:
+            Name: Authorization
+        - SingleHeader:
+            Name: X-Custom-Osb
+
+
+Outputs:
+  VendorPortalAlbSgUpdateLambda:
+    Description: A reference to the lambda function
+    Value: !Ref VendorPortalAlbSgUpdateLambda
+  VendorPortalAlbWafId:
+    Value: !GetAtt  VendorPortalAlbWaf.Id
+    Export:
+      Name: !Sub "${AWS::StackName}::WebACLId"
+  VendorPortalAlbWafArn:
+    Value: !GetAtt  VendorPortalAlbWaf.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}::WebACLArn"
+  VendorPortalAlbWafDeliveryStreamName:
+    Value: !Ref VendorPortalAlbWafDeliveryStream
+    Export:
+      Name: !Sub "${AWS::StackName}::DeliveryStreamName"
+  VendorPortalAlbWafDeliveryStreamArn:
+    Value: !GetAtt  VendorPortalAlbWafDeliveryStream.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}::DeliveryStreamArn"           
+  

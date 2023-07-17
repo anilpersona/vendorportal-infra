@@ -1,0 +1,98 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: S3 Buckets For Vendor Portal
+Parameters:
+  BillingTag:
+    Default: "vendorportal"
+    Type: "String"
+  OwnerTag:
+    Default: "vendorportal"
+    Type: "String"
+  ProjectTag:
+    Default: "vendorportal"
+    Type: "String"
+  Environment:
+    Default: "dev"
+    AllowedValues: [dev, prod, nonprod]
+    Type: "String"
+    ConstraintDescription: must specify prod, dev, or nonprod.
+  SSEAlgo:
+    Type: String
+    Default: "AES256"
+Conditions: 
+  IsProd: !Equals [ !Ref Environment, "prod" ]
+  IsNonProd: !Equals [ !Ref Environment, "nonprod" ]
+  IsDev: !Equals [ !Ref Environment, "dev" ]
+
+Resources:
+  VendorPortalArtifactBucketNameSsm:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${ProjectTag}/bucketname/artifacts"
+      Type: String
+      Value: !Ref VendorPortalEdgeArtifactBucketName
+      Description: SSM Parameter stores artifact bucket name   
+      Tags:
+        Name: !Sub "${AWS::StackName}-ssm-param-bucketname"
+        Billinge: !Sub "${BillingTag}"
+        Environment: !Sub "${Environment}"        
+        Owner: !Sub "${OwnerTag}"
+        Project: !Sub "${ProjectTag}" 
+  VendorPortalEdgeArtifactBucketName:
+    Type: AWS::S3::Bucket
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-edge-artifacts"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag      
+      BucketName: !Sub kmartau-vendorportal-edge-artifact-${Environment}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: !Ref SSEAlgo
+  VendorPortalEdgeArtifactPolicy:
+    Type: AWS::S3::BucketPolicy    
+    Properties:
+      Bucket: !Ref VendorPortalEdgeArtifactBucketName
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyDeleteBucket
+            Effect: Deny
+            Action: 's3:DeleteBucket'
+            Resource:
+              - !GetAtt VendorPortalEdgeArtifactBucketName.Arn
+            Principal:
+              AWS: '*'        
+          - Sid: "Allow Actions From dev/nonprod/prod"
+            Action:
+              - "s3:*"
+            Effect: "Allow"
+            Resource: 
+              - !GetAtt VendorPortalEdgeArtifactBucketName.Arn
+              - !Sub "${VendorPortalEdgeArtifactBucketName.Arn}/*"
+            Principal: 
+               AWS:
+                  - !Sub 'arn:aws:iam::${AWS::AccountId}:role/infra-cfnrole-vendorportal-nonprivileged'
+                  - !Sub 'arn:aws:iam::${AWS::AccountId}:role/ADFS-${Environment}-vendorportal-global-admin'
+
+
+Outputs:  
+  VendorPortalEdgeArtifactBucketName:
+    Description: Name S3 bucket for vendor portal artifacts
+    Value: !Ref VendorPortalEdgeArtifactBucketName
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalEdgeArtifactBucketName
+  VendorPortalEdgeArtifactBucketNameArn:
+    Description: ARN of S3 bucket for vendor portal artifacts
+    Value: !GetAtt VendorPortalEdgeArtifactBucketName.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}::VendorPortalEdgeArtifactBucketNameArn      
+ 

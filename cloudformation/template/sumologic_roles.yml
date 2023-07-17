@@ -1,0 +1,64 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: A CloudFormation template that creates a role for
+  authenticating with Sumo's AWS integrations.
+Parameters:
+  BillingTag:
+    Default: vendorportal
+    Type: String
+  OwnerTag:
+    Default: vendorportal
+    Type: String
+  ProjectTag:
+    Default: vendorportal
+    Type: String
+  Environment:
+    Default: dev
+    AllowedValues: [dev, prod, nonprod]
+    Type: String
+    ConstraintDescription: must specify prod, dev, or nonprod.
+ 
+Resources:
+  SumoRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-role-sumo"
+        - Key: Billing
+          Value: !Sub "${BillingTag}"
+        - Key: Environment
+          Value: !Sub "${Environment}"        
+        - Key: Owner
+          Value: !Sub "${OwnerTag}"
+        - Key: Project
+          Value: !Sub "${ProjectTag}"    
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            AWS: arn:aws:iam::926226587429:root
+          Action: sts:AssumeRole
+          Condition:
+            StringEquals:
+              sts:ExternalId:
+                au:00000000001C24E4
+      Path: "/"
+      Policies:
+      - PolicyName: SumoPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:GetObjectVersion
+              - s3:ListBucketVersions
+              - s3:ListBucket
+            Resource:
+              - !Sub "arn:aws:s3:::kmartau-vendorportal-logs-${Environment}/*"
+              - !Sub "arn:aws:s3:::kmartau-vendorportal-logs-${Environment}"
+Outputs:
+  SumoRoleARN:
+    Description: ARN of the created role. Copy this ARN back to Sumo to complete the source creation process.
+    Value: !GetAtt SumoRole.Arn

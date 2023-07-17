@@ -1,0 +1,456 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "VendorPortal portal - WAF V2 applied to Cloudfront"
+Parameters:
+  CWLogsRetentionPeriod:
+    Type: Number
+    Default: 7
+  SumoLogShipperLambdaArn:
+    Type: String
+    Default: 'test'
+  EnableXrayIpsetUpdateLambda:
+    Type: String
+    Description: Enables xray tracing on lambda
+    AllowedValues: ["true", "false"]
+    Default: "false"
+  LambdaPackageName:
+    Type: String
+    Description: Lambda package name
+    Default: test
+  S3EdgeStack:
+    Type: String
+    Description: Edge s3 stack
+  WafIpsetUpdateLambdaS3Key:
+    Type: String
+    Description: Lambda package name
+  SchedulerState:
+    Type: String
+    AllowedValues: [DISABLED, ENABLED] 
+    Description: Sate of Scheduler
+    Default: DISABLED
+  IpUpdateCron:
+    Type: String
+    Description: Schedule update Ips for CDN
+  ApiCustomHeader:    
+    Type: String
+    NoEcho: "true"
+    Default: test
+  WhitelistIPv4:
+    Type: CommaDelimitedList    
+    Description: CIDR notation list of IPs to be allowed (imperva IPs)
+    Default: ''
+  BlacklistIPv4:
+    Type: CommaDelimitedList
+    Description: CIDR notation list of IPs to be blocked (imperva IPs)
+    Default: ''
+  WAFScope:
+    Default: CLOUDFRONT
+    Type: "String"
+  BillingTag:
+    Default: "vendorportal"
+    Type: "String"
+  OwnerTag:
+    Default: "vendorportal"
+    Type: "String"
+  ProjectTag:
+    Default: "vendorportal"
+    Type: "String"
+  Environment:
+    Default: "dev"
+    AllowedValues: [dev, prod, nonprod]
+    Type: "String"
+    ConstraintDescription: must specify prod, dev, or nonprod.
+  StackIdentifier:
+    Type: String
+    AllowedPattern: '^([a-z0-9]+)?$'
+    Default: ''
+  RegexPatternSSMParamVersion:
+    Type: String
+    Default: '1'
+
+Conditions:
+  IsEmptyBlacklistIPv4: !Equals [ "", !Select [ 0 , !Ref BlacklistIPv4 ]]
+  IsEmptyWhitelistIPv4: !Equals [ "", !Select [ 0 , !Ref WhitelistIPv4 ]]
+  EnableXrayIpsetUpdateLambda: !Equals [ "true", !Ref EnableXrayIpsetUpdateLambda ]
+  IsSumoLogShipperLambdaArn: !Not [!Equals [ !Ref SumoLogShipperLambdaArn, "" ]]
+
+Resources:
+  VendorPortalWafIpsetUpdateLogGroup:
+    Type: "AWS::Logs::LogGroup"
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${VendorPortalWafIpsetUpdateLambda}"
+      RetentionInDays: !Ref CWLogsRetentionPeriod
+  VendorPortalWafIpsetUpdateSumoCWLogSubsriptionFilter:
+    Type: AWS::Logs::SubscriptionFilter
+    Condition: IsSumoLogShipperLambdaArn
+    Properties:
+      LogGroupName: !Ref VendorPortalWafIpsetUpdateLogGroup        
+      DestinationArn: !Ref SumoLogShipperLambdaArn           
+      FilterPattern: ''
+  VendorPortalCdnIpUpdateRule:    
+    Type: 'AWS::Events::Rule'
+    Properties:
+      Description: 'Cronjob to run lambda to update CDN IPs(Imperva)'
+      ScheduleExpression: !Ref IpUpdateCron
+      State: !Ref SchedulerState
+      Targets:
+        - Arn: !GetAtt VendorPortalWafIpsetUpdateLambda.Arn
+          Id: waf-ipset-update-lambda
+  VendorPortalWafIpsetUpdateLambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-iam-role-waf-ipset-update"
+        - Key: Billing
+          Value: !Sub "${BillingTag}"
+        - Key: Environment
+          Value: !Sub "${Environment}"        
+        - Key: Owner
+          Value: !Sub "${OwnerTag}"
+        - Key: Project
+          Value: !Sub "${ProjectTag}"
+      Path: "/"
+      Policies:
+        - PolicyName: "log-usage-policy"
+          PolicyDocument:
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream                  
+                  - logs:PutLogEvents
+                Resource: "arn:aws:logs:*:*:*"
+        - PolicyName: "EC2Permissions"
+          PolicyDocument:
+            Statement:
+              - Effect: "Allow"
+                Action:                  
+                  - wafv2:ListIPSets
+                  - wafv2:GetIPSet
+                  - wafv2:UpdateIPSet                  
+                Resource: "*"
+        - !If 
+          - EnableXrayIpsetUpdateLambda
+          - PolicyName: "xray-permissions"
+            PolicyDocument:
+              Statement:
+                - Effect: "Allow"
+                  Action:                  
+                    - xray:PutTraceSegments
+                    - xray:PutTelemetryRecords
+                  Resource: "*"
+          - !Ref AWS::NoValue
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [lambda.amazonaws.com]
+            Action: ['sts:AssumeRole']
+  VendorPortalWafIpsetUpdateLambdaInvokePermissionCron:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref VendorPortalWafIpsetUpdateLambda
+      Principal: events.amazonaws.com      
+      SourceArn: !GetAtt VendorPortalCdnIpUpdateRule.Arn
+  VendorPortalWafIpsetUpdateLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub vendorportal-waf-ipset-update-${Environment}
+      Role: !GetAtt VendorPortalWafIpsetUpdateLambdaRole.Arn   
+      Handler: lambda_function.handler
+      Runtime: python3.7
+      TracingConfig:
+        Mode: 
+          !If 
+            - EnableXrayIpsetUpdateLambda        
+            - Active
+            - !Ref AWS::NoValue
+      Timeout: 60
+      Environment:
+        Variables:
+          WAFV2_IPSET:  !Ref VendPortalWhitelistIpsetV4           
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-lambda-${Environment}"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag
+      Code:
+        S3Bucket:
+          Fn::ImportValue: !Sub ${S3EdgeStack}::VendorPortalEdgeArtifactBucketName
+        S3Key: !Sub "${WafIpsetUpdateLambdaS3Key}/${LambdaPackageName}.zip"
+
+  VendPortalWhitelistIpsetV4:
+    Type: AWS::WAFv2::IPSet
+    Properties: 
+      #Addresses: !Ref WhitelistIPv4
+      Addresses:
+        !If [ IsEmptyWhitelistIPv4, [], !Ref WhitelistIPv4 ]
+      Description: "Whitelisted IPv4 IP List"
+      IPAddressVersion: IPV4
+      Name: !Sub "${AWS::StackName}-WhitelistIpsetV4"
+      Scope: !Ref WAFScope
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-ipset-whitelist"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag    
+  VendPortalWhitelistIpsetV6:
+    Type: AWS::WAFv2::IPSet
+    Properties: 
+      Addresses: [] 
+      Description: "Whitelisted IPv6 IP List"
+      IPAddressVersion: IPV6
+      Name: !Sub "${AWS::StackName}-WhitelistIpsetV6"
+      Scope: !Ref WAFScope
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-ipset-whitelist"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag          
+  
+  VendPortalBlacklistIpsetV4:
+    Type: AWS::WAFv2::IPSet
+    Properties: 
+      #Addresses: [] #- 192.0.2.44/32
+      #Addresses: !Ref BlacklistIPv4
+      Addresses:
+        !If [IsEmptyBlacklistIPv4, [], !Ref BlacklistIPv4 ]
+      Description: "Blacklisted IPv4 IP List"
+      IPAddressVersion: IPV4
+      Name: !Sub "${AWS::StackName}-BlacklistIpsetV4"
+      Scope: !Ref WAFScope
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-ipset-blacklist-v4"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag
+  VendPortalBlacklistIpsetV6:
+    Type: AWS::WAFv2::IPSet
+    Properties: 
+      Addresses: []        
+      Description: "Blacklisted IPv6 IP List"
+      IPAddressVersion: IPV6
+      Name: !Sub "${AWS::StackName}-BlacklistIpsetV6"
+      Scope: !Ref WAFScope
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-ipset-blacklist-v6"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag          
+
+  VendorPortalWebACL:
+    Type: AWS::WAFv2::WebACL
+    Properties: 
+      Name: !Sub "${AWS::StackName}-CFWebACL"
+      Description: "Vendorportal webacl"
+      DefaultAction:
+        Block: {} 
+      # CustomResponseBodies: 
+      #   Content: "Request is Blocked"
+      #   ContentType: TEXT_PLAIN      
+      Scope: !Ref WAFScope
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-webacl-cf"
+        - Key: Billing
+          Value: !Ref BillingTag
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: Owner
+          Value: !Ref OwnerTag
+        - Key: Project
+          Value: !Ref ProjectTag
+      VisibilityConfig: 
+        CloudWatchMetricsEnabled: true
+        MetricName: VendorPortalCFWebACL
+        SampledRequestsEnabled: true
+      Rules:
+        - Priority: 0
+          Name: !Sub "${AWS::StackName}-VerifyCustomHeader" 
+          Action:
+            Allow: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Join [ '', [   !Join [ '', !Split [ '-', !Sub '${AWS::StackName}' ]], VerifyCustomHeader]]
+          Statement:
+            ByteMatchStatement:
+              FieldToMatch:
+                SingleHeader:
+                  Name: X-Custom-Osb
+              PositionalConstraint: EXACTLY
+              SearchString: !Ref ApiCustomHeader
+              TextTransformations:
+              - Type: NONE
+                Priority: 0       
+        - Priority: 1
+          Name: !Sub "${AWS::StackName}-WhitelistIp"
+          Action:
+            Allow: {}
+          Statement:
+            OrStatement:
+              Statements: 
+                - IPSetReferenceStatement: 
+                    Arn: !GetAtt VendPortalWhitelistIpsetV4.Arn
+                - IPSetReferenceStatement: 
+                    Arn: !GetAtt VendPortalWhitelistIpsetV6.Arn                  
+          VisibilityConfig: 
+            CloudWatchMetricsEnabled: true
+            MetricName: !Join [ '', [   !Join [ '', !Split [ '-', !Sub '${AWS::StackName}' ]], WhitelistIp]]
+            SampledRequestsEnabled: true
+        - Priority: 2
+          Name: !Sub "${AWS::StackName}-BlacklistIp"
+          Action:
+            Block: {}
+          Statement:
+            OrStatement:
+              Statements: 
+                - IPSetReferenceStatement: 
+                    Arn: !GetAtt VendPortalBlacklistIpsetV4.Arn
+                - IPSetReferenceStatement: 
+                    Arn: !GetAtt VendPortalBlacklistIpsetV6.Arn
+          VisibilityConfig: 
+            CloudWatchMetricsEnabled: true
+            MetricName: !Join [ '', [   !Join [ '', !Split [ '-', !Sub '${AWS::StackName}' ]], BlacklistIp]]
+            SampledRequestsEnabled: true
+        - Priority: 20
+          Name: !Sub "${AWS::StackName}-SqlInjectionRule"
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Join [ '', [   !Join [ '', !Split [ '-', !Sub '${AWS::StackName}' ]], SqlInjectionRule]]          
+          Statement:
+            OrStatement:
+              Statements:
+                - SqliMatchStatement:
+                    FieldToMatch:
+                      QueryString: {}
+                    TextTransformations:
+                      - Priority: 1
+                        Type: URL_DECODE
+                      - Priority: 2
+                        Type: HTML_ENTITY_DECODE
+                - SqliMatchStatement:
+                    FieldToMatch:
+                      Body: {}
+                    TextTransformations:
+                      - Priority: 1
+                        Type: URL_DECODE
+                      - Priority: 2
+                        Type: HTML_ENTITY_DECODE
+                - SqliMatchStatement:
+                    FieldToMatch:
+                      UriPath: {}
+                    TextTransformations:
+                      - Priority: 1
+                        Type: URL_DECODE
+                      - Priority: 2
+                        Type: HTML_ENTITY_DECODE
+                - SqliMatchStatement:
+                    FieldToMatch:
+                      SingleHeader: {Name: "Authorization"}
+                    TextTransformations:
+                      - Priority: 1
+                        Type: URL_DECODE
+                      - Priority: 2
+                        Type: HTML_ENTITY_DECODE
+                - SqliMatchStatement:
+                    FieldToMatch:
+                      SingleHeader: {Name: "Cookie"}
+                    TextTransformations:
+                      - Priority: 1
+                        Type: URL_DECODE
+                      - Priority: 2
+                        Type: HTML_ENTITY_DECODE          
+        - Priority: 30
+          Name: !Sub "${AWS::StackName}-XssRule"       
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Join [ '', [   !Join [ '', !Split [ '-', !Sub '${AWS::StackName}' ]], XssRule]]            
+          Statement:
+            OrStatement:
+              Statements:
+                - XssMatchStatement:
+                    FieldToMatch:
+                      QueryString: {}
+                    TextTransformations:
+                      - Priority: 1
+                        Type: URL_DECODE
+                      - Priority: 2
+                        Type: HTML_ENTITY_DECODE
+                - XssMatchStatement:
+                    FieldToMatch:
+                      Body: {}
+                    TextTransformations:
+                      - Priority: 1
+                        Type: URL_DECODE
+                      - Priority: 2
+                        Type: HTML_ENTITY_DECODE
+                - XssMatchStatement:
+                    FieldToMatch:
+                      UriPath: {}
+                    TextTransformations:
+                      - Priority: 1
+                        Type: URL_DECODE
+                      - Priority: 2
+                        Type: HTML_ENTITY_DECODE
+                - XssMatchStatement:
+                    FieldToMatch:
+                      SingleHeader: {Name: "Cookie"}
+                    TextTransformations:
+                      - Priority: 1
+                        Type: URL_DECODE
+                      - Priority: 2
+                        Type: HTML_ENTITY_DECODE
+
+Outputs:
+  VendorPortalWebACLId:
+    Value: !GetAtt  VendorPortalWebACL.Id
+    Export:
+      Name: !Sub "${AWS::StackName}::WebACLId"
+  VendorPortalWebACLArn:
+    Value: !GetAtt  VendorPortalWebACL.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}::WebACLArn"
+  VendorPortalWafIpsetUpdateLambda:
+    Description: A reference to the lambda function
+    Value: !Ref VendorPortalWafIpsetUpdateLambda
+    Export:
+      Name: !Sub "${AWS::StackName}::WafIpUpdateLambda"            
